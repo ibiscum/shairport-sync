@@ -83,7 +83,8 @@ static int play(void *buf, int samples, __attribute__((unused)) int sample_type,
     // int rc = non_blocking_write(fd, buf, samples * 4);
     if (bytes_per_frame == 0)
       debug(1, "pipe: bytes per frame not initialised before play()!");
-    int rc = write(fd, buf, samples * bytes_per_frame);
+    size_t bytes_to_write = (size_t)samples * bytes_per_frame;
+    int rc = write(fd, buf, bytes_to_write);
     if ((rc < 0) && (errno != EPIPE) && (warned == 0)) {
       strerror_r(errno, (char *)errorstring, 1024);
       debug(1, "error %d writing to the pipe named \"%s\": \"%s\".", errno, pipename, errorstring);
