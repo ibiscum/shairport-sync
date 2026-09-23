@@ -62,10 +62,16 @@ shairport-sync-test
 shairport-sync-dbus-test-client
 shairport-sync-mpris-test-client
 test_activity_monitor
-*.log
+test_alac
+test_alac_compressed
+test_ap2_packet_validation
+test_ap2_buffered_gate_integration
 test_player_common_regression
 test_player_common_unit
+test_rtp_minimal
+test_shairport_cli_regression
 coverage*
 *.gcda
 *.gcno
 *.gcov
+*.log

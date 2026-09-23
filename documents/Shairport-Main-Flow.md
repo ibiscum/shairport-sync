@@ -13,6 +13,8 @@ This note describes the purpose and execution flow of [shairport.c](shairport.c)
 - starts listener threads
 - owns orderly shutdown and resource cleanup
 
+For the RTP transport and timing layer started by the main process, see [RTP-Flow.md](RTP-Flow.md).
+
 ## High-Level Responsibilities
 
 ### 1. Process Bootstrap

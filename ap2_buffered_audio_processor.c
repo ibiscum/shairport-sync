@@ -28,6 +28,7 @@
 #include "common.h"
 #include "player.h"
 #include "rtp.h"
+#include "utilities/ap2_packet_validation.h"
 #include "utilities/buffered_read.h"
 #include "utilities/mod23.h"
 #include "utilities/network_utilities.h"
@@ -118,14 +119,14 @@ void *rtp_buffered_audio_processor(void *arg) {
   pthread_cleanup_push(rtp_buffered_audio_cleanup_handler, arg);
 
   pthread_t *buffered_reader_thread = malloc(sizeof(pthread_t));
-  if (buffered_reader_thread == NULL)
-    debug(1, "cannot allocate a buffered_reader_thread!");
+  if (ap2_allocation_succeeded(buffered_reader_thread) == 0)
+    die("cannot allocate a buffered_reader_thread!");
   memset(buffered_reader_thread, 0, sizeof(pthread_t));
   pthread_cleanup_push(malloc_cleanup, &buffered_reader_thread);
 
   buffered_tcp_desc *buffered_audio = malloc(sizeof(buffered_tcp_desc));
-  if (buffered_audio == NULL)
-    debug(1, "cannot allocate a buffered_tcp_desc!");
+  if (ap2_allocation_succeeded(buffered_audio) == 0)
+    die("cannot allocate a buffered_tcp_desc!");
   // initialise the
 
   memset(buffered_audio, 0, sizeof(buffered_tcp_desc));
@@ -147,8 +148,8 @@ void *rtp_buffered_audio_processor(void *arg) {
   // initialise the buffer data structure
   buffered_audio->buffer_max_size = conn->ap2_audio_buffer_size;
   buffered_audio->buffer = malloc(conn->ap2_audio_buffer_size);
-  if (buffered_audio->buffer == NULL)
-    debug(1, "cannot allocate an audio buffer of %zu bytes!", buffered_audio->buffer_max_size);
+  if (ap2_allocation_succeeded(buffered_audio->buffer) == 0)
+    die("cannot allocate an audio buffer of %zu bytes!", buffered_audio->buffer_max_size);
   pthread_cleanup_push(malloc_cleanup, &buffered_audio->buffer);
 
   buffered_audio->toq = buffered_audio->buffer;
@@ -156,23 +157,27 @@ void *rtp_buffered_audio_processor(void *arg) {
 
   buffered_audio->sock_fd = conn->buffered_audio_socket;
 
-  named_pthread_create(buffered_reader_thread, NULL, &buffered_tcp_reader, buffered_audio,
-                       "ap2_buf_rdr_%d", conn->connection_number);
+  int buffered_reader_create_status =
+      named_pthread_create(buffered_reader_thread, NULL, &buffered_tcp_reader, buffered_audio,
+                           "ap2_buf_rdr_%d", conn->connection_number);
+  if (buffered_reader_create_status != 0)
+    die("unable to start buffered TCP reader thread for connection %d: %d",
+        conn->connection_number, buffered_reader_create_status);
   pthread_cleanup_push(thread_cleanup, buffered_reader_thread);
 
   const size_t buffer_packet_size = 16 * 1024; // it looks as if 4096 is the largest size (?)
   uint8_t *packet = malloc(buffer_packet_size);
-  if (packet == NULL)
-    debug(1, "cannot allocate an audio packet buffer of %zu bytes!", buffer_packet_size);
+  if (ap2_allocation_succeeded(packet) == 0)
+    die("cannot allocate an audio packet buffer of %zu bytes!", buffer_packet_size);
   pthread_cleanup_push(malloc_cleanup, &packet);
 
   const size_t leading_free_space_length =
       256; // leave this many bytes free to make room for prefixes that might be added later
 
   unsigned char *m = malloc(buffer_packet_size + leading_free_space_length);
-  if (m == NULL)
-    debug(1, "cannot allocate an audio m buffer of %zu bytes!",
-          buffer_packet_size + leading_free_space_length);
+  if (ap2_allocation_succeeded(m) == 0)
+    die("cannot allocate an audio m buffer of %zu bytes!",
+        buffer_packet_size + leading_free_space_length);
   pthread_cleanup_push(malloc_cleanup, &m);
   // unsigned char m[32 * 1024 + leading_free_space_length];
 
@@ -241,6 +246,7 @@ void *rtp_buffered_audio_processor(void *arg) {
     if (new_audio_block_needed != 0) {
       // a block is preceded by its length in a uint16_t
       uint16_t data_len;
+      size_t packet_bytes_to_read = 0;
       // here we read from the buffer that our thread has been reading
 
       // debug(1,"read a block");
@@ -255,9 +261,21 @@ void *rtp_buffered_audio_processor(void *arg) {
         conn->ap2_audio_buffer_minimum_size = bytes_remaining_in_buffer;
 
       if (nread > 0) {
+        if (ap2_calculate_buffered_audio_packet_size(data_len, buffer_packet_size,
+                                                     &packet_bytes_to_read) == 0) {
+          debug(1,
+                "Connection %d: invalid AP2 buffered packet length %u for buffer capacity %zu.",
+                conn->connection_number, data_len, buffer_packet_size);
+          errno = EMSGSIZE;
+          nread = -1;
+        }
+      }
+
+      if (nread > 0) {
         // get the block itself
         // debug(1,"buffered audio packet of size %u detected.", data_len - 2);
-        nread = read_sized_block(buffered_audio, packet, data_len - 2, &bytes_remaining_in_buffer);
+        nread = read_sized_block(buffered_audio, packet, packet_bytes_to_read,
+                                 &bytes_remaining_in_buffer);
         // debug(1,"block read");
 
         // diagnostic
@@ -521,32 +539,37 @@ void *rtp_buffered_audio_processor(void *arg) {
                 if (lead_time >= 0) { // only decipher the packet if it's not too late
                   int response = -1;  // guess that there is a problem
                   if (conn->session_key != NULL) {
-                    unsigned char nonce[12];
-                    memset(nonce, 0, sizeof(nonce));
-                    memcpy(
-                        nonce + 4, packet + nread - 8,
-                        8); // front-pad the 8-byte nonce received to get the 12-byte nonce expected
+                    if (ap2_encrypted_packet_length_is_valid(nread) == 0) {
+                      debug(1,
+                            "Connection %d: encrypted AP2 packet too short to decrypt: %zd bytes.",
+                            conn->connection_number, nread);
+                    } else {
+                      unsigned char nonce[12];
+                      memset(nonce, 0, sizeof(nonce));
+                      memcpy(nonce + 4, packet + nread - 8,
+                             8); // front-pad the 8-byte nonce received to get the 12-byte nonce expected
 
-                    // https://libsodium.gitbook.io/doc/secret-key_cryptography/aead/chacha20-poly1305/ietf_chacha20-poly1305_construction
-                    // Note: the eight-byte nonce must be front-padded out to 12 bytes.
+                      // https://libsodium.gitbook.io/doc/secret-key_cryptography/aead/chacha20-poly1305/ietf_chacha20-poly1305_construction
+                      // Note: the eight-byte nonce must be front-padded out to 12 bytes.
 
-                    // Leave leading_free_space_length bytes at the start for possible headers like
-                    // an ADTS header (7 bytes)
-                    memset(m, 0, leading_free_space_length);
-                    response = crypto_aead_chacha20poly1305_ietf_decrypt(
-                        payload_pointer,     // where the decrypted payload will start
-                        &new_payload_length, // mlen_p
-                        NULL,                // nsec,
-                        packet +
-                            12, // the ciphertext starts 12 bytes in and is followed by the MAC tag,
-                        nread - (8 + 12), // clen -- the last 8 bytes are the nonce
-                        packet + 4,       // authenticated additional data
-                        8,                // authenticated additional data length
-                        nonce,
-                        conn->session_key); // *k
-                    if (response != 0)
-                      debug(1, "Error decrypting audio packet %u -- packet length %zd.", seq_no,
-                            nread);
+                      // Leave leading_free_space_length bytes at the start for possible headers
+                      // like an ADTS header (7 bytes)
+                      memset(m, 0, leading_free_space_length);
+                      response = crypto_aead_chacha20poly1305_ietf_decrypt(
+                          payload_pointer,     // where the decrypted payload will start
+                          &new_payload_length, // mlen_p
+                          NULL,                // nsec,
+                          packet +
+                              12, // the ciphertext starts 12 bytes in and is followed by the MAC tag,
+                          nread - (8 + 12), // clen -- the last 8 bytes are the nonce
+                          packet + 4,       // authenticated additional data
+                          8,                // authenticated additional data length
+                          nonce,
+                          conn->session_key); // *k
+                      if (response != 0)
+                        debug(1, "Error decrypting audio packet %u -- packet length %zd.", seq_no,
+                              nread);
+                    }
                   } else {
                     debug(2,
                           "No session key, so the audio packet can not be deciphered -- skipped.");

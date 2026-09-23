@@ -65,7 +65,14 @@ static mdns_backend *mdns_backends[] = {
     NULL};
 
 void mdns_register(char **txt_records, char **secondary_txt_records) {
-  char *ap1_service_name = alloca(strlen(config.service_name) + 14);
+  if (config.service_name == NULL)
+    die("mDNS service name is not configured.");
+
+  size_t service_name_length = strlen(config.service_name);
+  char *ap1_service_name = malloc(service_name_length + 14);
+  if (ap1_service_name == NULL)
+    die("Could not allocate mDNS service name buffer.");
+
   char *p = ap1_service_name;
   int i;
   for (i = 0; i < 6; i++) {
@@ -76,21 +83,27 @@ void mdns_register(char **txt_records, char **secondary_txt_records) {
   strcpy(p, config.service_name);
 
   mdns_backend **b = NULL;
+  config.mdns = NULL;
 
   if (config.mdns_name != NULL) {
+    int backend_found = 0;
     for (b = mdns_backends; *b; b++) {
       if (strcmp((*b)->name, config.mdns_name) != 0) // Not the one we are looking for
         continue;
+
+      backend_found = 1;
       int error = (*b)->mdns_register(ap1_service_name, config.service_name, config.port,
                                       txt_records, secondary_txt_records);
       if (error >= 0) {
         config.mdns = *b;
+      } else {
+        warn("mDNS backend \"%s\" failed to register (error %d).", (*b)->name, error);
       }
       break;
     }
 
-    if (*b == NULL)
-      warn("mDNS backend not found");
+    if (backend_found == 0)
+      warn("mDNS backend \"%s\" not found.", config.mdns_name);
   } else {
     // default -- pick the first back end
     for (b = mdns_backends; *b; b++) {
@@ -99,14 +112,19 @@ void mdns_register(char **txt_records, char **secondary_txt_records) {
       if (error >= 0) {
         config.mdns = *b;
         break;
+      } else {
+        debug(1, "mDNS backend \"%s\" failed to register (error %d).", (*b)->name, error);
       }
     }
   }
 
-  if (config.mdns == NULL)
+  if (config.mdns == NULL) {
+    free(ap1_service_name);
     die("Could not establish mDNS advertisement!");
+  }
 
   mdns_dacp_monitor_start(); // create a dacp monitor thread
+  free(ap1_service_name);
 }
 
 void mdns_update(char **txt_records, char **secondary_txt_records) {
@@ -120,6 +138,7 @@ void mdns_unregister(void) {
   mdns_dacp_monitor_stop();
   if (config.mdns) {
     config.mdns->mdns_unregister();
+    config.mdns = NULL;
   }
 }
 
@@ -130,7 +149,7 @@ void mdns_dacp_monitor_start(void) {
     debug(3, "Can't start a DACP monitor -- no mdns_dacp_monitor start registered.");
 }
 
-void mdns_dacp_monitor_stop() {
+void mdns_dacp_monitor_stop(void) {
   if ((config.mdns) && (config.mdns->mdns_dacp_monitor_stop)) {
     config.mdns->mdns_dacp_monitor_stop();
   } else

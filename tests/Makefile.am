@@ -12,6 +12,10 @@ GCOVR_TOPLEVEL_FILTER = --filter "$(abs_top_srcdir)/[^/]+\\.(c|cpp)$$"
 check_PROGRAMS = test_activity_monitor \
 	test_alac \
 	test_alac_compressed \
+	test_ap2_buffered_gate_integration \
+	test_ap2_packet_validation \
+	test_mdns_minimal \
+	test_rtp_minimal \
 	test_player_common_unit \
 	test_player_common_regression \
 	test_shairport_cli_regression
@@ -41,6 +45,38 @@ test_alac_compressed_SOURCES = \
 	$(abs_top_srcdir)/alac.c
 test_alac_compressed_LDFLAGS = -pthread $(EXTRA_COVERAGE_LINK_FLAGS)
 test_alac_compressed_LDADD = $(CMOCKA_LIBS)
+
+test_ap2_packet_validation_CFLAGS = $(CMOCKA_CFLAGS) $(TEST_DEBUG_INCLUDE) -pthread $(EXTRA_COVERAGE_FLAGS)
+test_ap2_packet_validation_SOURCES = \
+	test_ap2_packet_validation.c \
+	$(abs_top_srcdir)/utilities/ap2_packet_validation.c
+test_ap2_packet_validation_LDFLAGS = -pthread $(EXTRA_COVERAGE_LINK_FLAGS)
+test_ap2_packet_validation_LDADD = $(CMOCKA_LIBS)
+
+test_ap2_buffered_gate_integration_CFLAGS = $(CMOCKA_CFLAGS) $(TEST_DEBUG_INCLUDE) -pthread $(EXTRA_COVERAGE_FLAGS)
+test_ap2_buffered_gate_integration_SOURCES = \
+	test_ap2_buffered_gate_integration.c \
+	test_ap2_buffered_gate_integration_stubs.c \
+	$(abs_top_srcdir)/utilities/ap2_packet_validation.c \
+	$(abs_top_srcdir)/utilities/buffered_read.c
+test_ap2_buffered_gate_integration_LDFLAGS = -pthread $(EXTRA_COVERAGE_LINK_FLAGS)
+test_ap2_buffered_gate_integration_LDADD = $(CMOCKA_LIBS)
+
+test_mdns_minimal_CFLAGS = $(CMOCKA_CFLAGS) $(TEST_DEBUG_INCLUDE) -pthread $(EXTRA_COVERAGE_FLAGS) -DCONFIG_DNS_SD
+test_mdns_minimal_SOURCES = \
+	test_mdns_minimal.c \
+	test_mdns_minimal_stubs.c \
+	$(abs_top_srcdir)/mdns.c
+test_mdns_minimal_LDFLAGS = -pthread $(EXTRA_COVERAGE_LINK_FLAGS)
+test_mdns_minimal_LDADD = $(CMOCKA_LIBS)
+
+test_rtp_minimal_CFLAGS = $(CMOCKA_CFLAGS) $(TEST_DEBUG_INCLUDE) -pthread $(EXTRA_COVERAGE_FLAGS)
+test_rtp_minimal_SOURCES = \
+	test_rtp_minimal.c \
+	test_rtp_minimal_stubs.c \
+	$(abs_top_srcdir)/rtp.c
+test_rtp_minimal_LDFLAGS = -pthread $(EXTRA_COVERAGE_LINK_FLAGS)
+test_rtp_minimal_LDADD = $(CMOCKA_LIBS) -lm
 
 test_player_common_unit_CFLAGS = $(CMOCKA_CFLAGS) $(TEST_DEBUG_INCLUDE) -pthread $(EXTRA_COVERAGE_FLAGS)
 test_player_common_unit_SOURCES = \

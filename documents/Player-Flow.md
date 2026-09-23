@@ -17,6 +17,8 @@ It sits between RTP packet reception and the selected output backend, and is res
 - Optional DSP stages (loudness, convolution) and dither/output formatting.
 - Runtime volume/mute policy and metadata/statistics reporting.
 
+For the network and timing side of packet delivery, see [RTP-Flow.md](RTP-Flow.md).
+
 ## Major Entry Points
 
 - Packet ingestion: [player_put_packet](../player.c#L1454)
