@@ -32,6 +32,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <syslog.h>
 
 static int debuglev = 0;

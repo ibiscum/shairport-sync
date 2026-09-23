@@ -87,6 +87,7 @@
 #include "common.h"
 #include "mdns.h"
 #include "player.h"
+#include "player_common.h"
 #include "rtp.h"
 #include "rtsp.h"
 
@@ -194,15 +195,14 @@ void unencrypted_packet_decode(rtsp_conn_info *conn, unsigned char *packet, int 
       die("No ALAC decoder included!");
     }
   } else if (conn->stream.type == ast_uncompressed) {
-    int i;
+    size_t i;
     short *source = (short *)packet;
     // dest (abuf->data) is allocated for exactly one packet:
     // conn->frames_per_packet * conn->input_bytes_per_frame bytes. Never copy more
     // than that, regardless of the received packet length, to avoid a heap overflow.
-    int max_bytes = conn->frames_per_packet * conn->input_bytes_per_frame;
-    if (length > max_bytes)
-      length = max_bytes;
-    for (i = 0; i < length / 2; i++) {
+    size_t bytes_to_copy = player_safe_uncompressed_bytes_to_copy(
+        length, conn->frames_per_packet, conn->input_bytes_per_frame);
+    for (i = 0; i < bytes_to_copy / 2; i++) {
       // assuming each input sample is 16 bits.
       *dest = ntohs(*source);
       dest++;
@@ -367,28 +367,7 @@ size_t get_audio_buffer_occupancy(rtsp_conn_info *conn) {
 }
 
 const char *get_category_string(airplay_stream_c cat) {
-  char *category;
-  switch (cat) {
-  case unspecified_stream_category:
-    category = "unspecified stream";
-    break;
-  case ptp_stream:
-    category = "PTP stream";
-    break;
-  case ntp_stream:
-    category = "NTP stream";
-    break;
-  case remote_control_stream:
-    category = "Remote Control stream";
-    break;
-  case classic_airplay_stream:
-    category = "Classic AirPlay stream";
-    break;
-  default:
-    category = "Unexpected stream code";
-    break;
-  }
-  return category;
+  return player_stream_category_name(cat);
 }
 
 #ifdef CONFIG_FFMPEG

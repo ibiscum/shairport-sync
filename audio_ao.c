@@ -28,6 +28,7 @@
 #include "audio.h"
 #include "common.h"
 #include <ao/ao.h>
+#include <getopt.h>
 #include <memory.h>
 #include <stdio.h>
 #include <unistd.h>

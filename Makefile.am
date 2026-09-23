@@ -8,7 +8,12 @@ homedir = @HOME@
 if USE_XMLTOMAN
   SUBDIRS = man
 else
+	SUBDIRS =
   man_MANS = $(top_srcdir)/man/shairport-sync.1
+endif
+
+if USE_CMOCKA_TESTS
+	SUBDIRS += tests
 endif
 
 lib_pair_ap_a_CFLAGS = -Wall -g -DCONFIG_GCRYPT -pthread --include=utilities/debug.h
@@ -28,7 +33,7 @@ noinst_LIBRARIES =
 # See below for the flags for the test client program
 
 shairport_sync_SOURCES = shairport.c bonjour_strings.c mdns.c common.c rtp.c \
-  player.c audio.c loudness.c activity_monitor.c \
+	player.c audio.c loudness.c activity_monitor.c \
   rtsp.c \
   utilities/debug.c utilities/network_utilities.c utilities/rtsp_message_utilities.c \
   utilities/string_utilities.c \
@@ -352,4 +357,25 @@ if INSTALL_CONFIG_FILES
 
 install-exec-hook: install-config-files
 
+endif
+
+clean-local:
+	-find "$(abs_top_builddir)" -type f \( -name '*.gcda' -o -name '*.gcno' -o -name '*.gcov' -o -name '*.gcov.json.gz' -o -name 'coverage.html' \) -exec rm -f {} +
+
+distclean-local: clean-local
+
+if USE_CMOCKA_TESTS
+coverage:
+	$(MAKE) -C tests coverage
+
+coverage-text:
+	$(MAKE) -C tests coverage-text
+else
+coverage:
+	@echo "Coverage target unavailable: configure with CMocka tests enabled."
+	@exit 1
+
+coverage-text:
+	@echo "Coverage target unavailable: configure with CMocka tests enabled."
+	@exit 1
 endif

@@ -56,3 +56,16 @@ build
 
 # IntelliJ/JetBrains
 .idea/
+
+# Test binaries
+shairport-sync-test
+shairport-sync-dbus-test-client
+shairport-sync-mpris-test-client
+test_activity_monitor
+*.log
+test_player_common_regression
+test_player_common_unit
+coverage*
+*.gcda
+*.gcno
+*.gcov
