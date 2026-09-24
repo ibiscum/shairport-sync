@@ -121,6 +121,7 @@ void mdns_register(char **txt_records, char **secondary_txt_records) {
   if (config.mdns == NULL) {
     free(ap1_service_name);
     die("Could not establish mDNS advertisement!");
+    return;
   }
 
   mdns_dacp_monitor_start(); // create a dacp monitor thread

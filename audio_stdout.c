@@ -46,7 +46,7 @@ static int play(void *buf, int samples, __attribute__((unused)) int sample_type,
   char errorstring[1024];
   if (bytes_per_frame == 0)
     debug(1, "stdout: bytes per frame not initialised before play()!");
-  int rc = write(fd, buf, samples * bytes_per_frame);
+  int rc = write(fd, buf, (size_t)samples * bytes_per_frame);
   if ((rc < 0) && (warned == 0)) {
     strerror_r(errno, (char *)errorstring, 1024);
     warn("error %d writing to stdout (fd: %d): \"%s\".", errno, fd, errorstring);
