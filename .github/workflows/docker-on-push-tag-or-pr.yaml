@@ -6,6 +6,8 @@
 # 'development' branch - development, development-classic (for all pushes including tags)
 # Builds but does not push a docker image for PRs.
 name: Build and conditionally push docker image
+permissions:
+  contents: read
 on:
   workflow_dispatch:
   push:
