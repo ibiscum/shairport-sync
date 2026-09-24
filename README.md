@@ -14,6 +14,7 @@ Shairport Sync does not support AirPlay video or photo streaming.
 * A building guide is available [here](BUILD.md).
 * A Docker image is available on the [Docker Hub](https://hub.docker.com/r/mikebrady/shairport-sync). Also see [docker/README.md](docker/README.md).
 * Next Steps and Advanced Topics are [here](ADVANCED%20TOPICS/README.md).
+* Architecture and implementation flow documents index is [here](documents/README.md).
 * Runtime settings are documented [here](scripts/shairport-sync.conf).
 * Build configuration options are detailed in [CONFIGURATION FLAGS.md](CONFIGURATION%20FLAGS.md).
 * The `man` page, detailing command line options, is [here](https://raw.githack.com/mikebrady/shairport-sync/master/man/shairport-sync.1.xml).
@@ -77,5 +78,5 @@ Timestamps are referenced relative to the source computer's clock – the "sourc
 ## Example configurations
 
 ```bash
-./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-airplay-2
+./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire
 ```

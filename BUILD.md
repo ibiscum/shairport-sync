@@ -252,6 +252,56 @@ $ sh user-service-install.sh
 ```
 This will run a few checks, install a user startup script and start Shairport Sync immediately. (Run `$ sh user-service-install.sh --dry-run` initially if you prefer...)
 
+For a short PipeWire-focused user-service checklist (including boot-time start using lingering), see [User Service Setup (PipeWire)](documents/PipeWire-Audio-Backend-Flow.md#user-service-setup-pipewire).
+
+To view logs when running Shairport Sync as a user service:
+```
+$ journalctl --user -u shairport-sync.service -b
+```
+To follow logs live:
+```
+$ journalctl --user -u shairport-sync.service -f
+```
+
+## Realtime Properties
+
+If you see a message like this in the logs:
+```
+Can not set realtime properties of thread "player_1".
+```
+then your user manager may be running with realtime limits set to zero, even if the `shairport-sync.service` user unit itself has `LimitRTPRIO` configured.
+
+Check the user manager limits:
+```
+$ id -u
+$ systemctl show user@$(id -u).service -p LimitRTPRIO -p LimitNICE
+```
+If either limit is `0`, add an override:
+```
+# sudo mkdir -p /etc/systemd/system/user@.service.d
+# sudo tee /etc/systemd/system/user@.service.d/10-realtime.conf >/dev/null <<'EOF'
+[Service]
+LimitRTPRIO=95
+LimitNICE=-20
+LimitMEMLOCK=infinity
+EOF
+```
+
+Reload and restart:
+```
+# sudo systemctl daemon-reload
+# sudo systemctl restart user@$(id -u).service
+$ systemctl --user restart shairport-sync.service
+```
+
+If restarting `user@...` is disruptive, just reboot instead.
+
+Verify that limits are now applied to the running Shairport Sync process:
+```
+$ pid=$(systemctl --user show -p MainPID --value shairport-sync.service)
+$ cat /proc/$pid/limits | grep -E "Max realtime priority|Max nice priority"
+```
+
 ##### User Service Limitations.
 1. If Shairport Sync is installed as a user service, it is activated when that user logs in and deactivated when the user logs out.
 On an unattended system, this difficulty can be overcome by using automatic user login.

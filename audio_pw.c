@@ -30,6 +30,7 @@
 
 #include "audio.h"
 #include "common.h"
+#include "utilities/audio_pw_safety.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -176,14 +177,28 @@ static const struct pw_stream_events stream_events = {PW_VERSION_STREAM_EVENTS,
                                                       .process = on_process};
 
 static void deinit(void) {
-  pw_thread_loop_stop(data.loop);
-  if (data.stream != NULL)
+  if (data.loop != NULL)
+    pw_thread_loop_stop(data.loop);
+  if (data.stream != NULL) {
     pw_stream_destroy(data.stream);
-  pw_thread_loop_destroy(data.loop);
+    data.stream = NULL;
+  }
+  if (data.loop != NULL) {
+    pw_thread_loop_destroy(data.loop);
+    data.loop = NULL;
+  }
   pw_deinit();
   on_process_is_running = 0;
-  if (audio_lmb != NULL)
+  stream_is_active = 0;
+  if (audio_lmb != NULL) {
     free(audio_lmb); // deallocate that buffer
+    audio_lmb = NULL;
+  }
+  audio_umb = NULL;
+  audio_toq = NULL;
+  audio_eoq = NULL;
+  audio_size = 0;
+  audio_occupancy = 0;
 }
 
 static int init(__attribute__((unused)) int argc, __attribute__((unused)) char **argv) {
@@ -236,6 +251,11 @@ static int init(__attribute__((unused)) int argc, __attribute__((unused)) char *
 
   /* make a threaded loop. */
   data.loop = pw_thread_loop_new("shairport-sync", NULL);
+  if (data.loop == NULL) {
+    debug(1, "PipeWire backend could not create thread loop.");
+    pw_deinit();
+    return -1;
+  }
 
   pw_thread_loop_lock(data.loop);
 
@@ -258,7 +278,26 @@ static int init(__attribute__((unused)) int argc, __attribute__((unused)) char *
 
   data.stream = pw_stream_new_simple(pw_thread_loop_get_loop(data.loop), config.appName, props,
                                      &stream_events, &data);
-  pw_thread_loop_start(data.loop);
+  if (data.stream == NULL) {
+    debug(1, "PipeWire backend could not create stream.");
+    pw_thread_loop_unlock(data.loop);
+    pw_thread_loop_destroy(data.loop);
+    data.loop = NULL;
+    pw_deinit();
+    return -1;
+  }
+
+  int start_response = pw_thread_loop_start(data.loop);
+  if (start_response != 0) {
+    debug(1, "PipeWire backend could not start thread loop: %d.", start_response);
+    pw_stream_destroy(data.stream);
+    data.stream = NULL;
+    pw_thread_loop_unlock(data.loop);
+    pw_thread_loop_destroy(data.loop);
+    data.loop = NULL;
+    pw_deinit();
+    return -1;
+  }
 
   on_process_is_running = 0;
 
@@ -273,7 +312,8 @@ static int check_settings(sps_format_t sample_format, unsigned int sample_rate,
 
   int response = EINVAL;
 
-  if (sps_format_lookup(sample_format) != NULL)
+  int format_supported = (sps_format_lookup(sample_format) != NULL);
+  if (audio_pw_validate_configuration_request(format_supported, sample_rate, channel_count) != 0)
     response = 0;
 
   debug(3, "pw: configuration: %u/%s/%u %s.", sample_rate,
@@ -295,7 +335,13 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
   int response = 0;
   char *channel_map = NULL;
   // if (1) {
-  if (current_encoded_output_format != requested_encoded_format) {
+  if (audio_pw_requires_reconfigure(current_encoded_output_format, requested_encoded_format) != 0) {
+    int runtime_handles_status = audio_pw_validate_runtime_handles(data.loop, data.stream);
+    if (runtime_handles_status != 0) {
+      debug(1, "pw: configure requested with missing runtime handles: %d.", runtime_handles_status);
+      return runtime_handles_status;
+    }
+
     uint64_t start_time = get_absolute_time_in_ns();
     if (current_encoded_output_format == 0)
       debug(2, "pw: setting output configuration to %s.",
@@ -305,16 +351,15 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
       // string buffer each time
       debug(2, "pw: changing output configuration to %s.",
             short_format_description(requested_encoded_format));
-    current_encoded_output_format = requested_encoded_format;
     spa_sps_t *format_info =
-        sps_format_lookup(FORMAT_FROM_ENCODED_FORMAT(current_encoded_output_format));
+      sps_format_lookup(FORMAT_FROM_ENCODED_FORMAT(requested_encoded_format));
 
     if (format_info == NULL)
       die("Can't find format information!");
     // enum spa_audio_format spa_format = format_info->spa_format;
     data.bytes_per_sample = format_info->bytes_per_sample;
-    data.channels = CHANNELS_FROM_ENCODED_FORMAT(current_encoded_output_format);
-    data.rate = RATE_FROM_ENCODED_FORMAT(current_encoded_output_format);
+    data.channels = CHANNELS_FROM_ENCODED_FORMAT(requested_encoded_format);
+    data.rate = RATE_FROM_ENCODED_FORMAT(requested_encoded_format);
 
     pw_thread_loop_lock(data.loop);
     enable_fill = 0;
@@ -347,7 +392,7 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
     const struct spa_pod *params[1];
     // create a stream with the default channel layout corresponding to
     // the number of channels
-    switch (CHANNELS_FROM_ENCODED_FORMAT(current_encoded_output_format)) {
+    switch (CHANNELS_FROM_ENCODED_FORMAT(requested_encoded_format)) {
     case 1:
       channel_map = channel_map_mono;
       params[0] = spa_format_audio_raw_build(
@@ -444,10 +489,15 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
 
     // Now connect this stream. We ask that our process function is
     // called in a realtime thread.
-    pw_stream_connect(data.stream, PW_DIRECTION_OUTPUT, PW_ID_ANY,
-                      PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
-                          PW_STREAM_FLAG_RT_PROCESS,
-                      params, 1);
+    response = pw_stream_connect(data.stream, PW_DIRECTION_OUTPUT, PW_ID_ANY,
+                   PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                     PW_STREAM_FLAG_RT_PROCESS,
+                   params, 1);
+    response = audio_pw_validate_connect_result(response);
+    current_encoded_output_format =
+        audio_pw_next_configured_format(requested_encoded_format, response);
+    if (response != 0)
+      debug(1, "pw: stream connect failed: %d.", response);
     stream_is_active = 0;
     enable_fill = 1;
     pw_thread_loop_unlock(data.loop);
@@ -525,7 +575,9 @@ static int delay(long *the_delay) {
     do {
       stream_time_valid_if_zero =
           pw_stream_get_time_n(data.stream, &stream_time_info_1, sizeof(struct pw_time));
+        pthread_mutex_lock(&buffer_mutex);
       audio_occupancy_now = audio_occupancy;
+        pthread_mutex_unlock(&buffer_mutex);
       pw_stream_get_time_n(data.stream, &stream_time_info_2, sizeof(struct pw_time));
 
       non_matching = memcmp(&stream_time_info_1, &stream_time_info_2, sizeof(struct pw_time));
@@ -552,16 +604,20 @@ static int delay(long *the_delay) {
       uint64_t frames_possibly_played_since_measurement =
           ((interval_from_pw_time_to_now_ns * data.rate) + 500000000L) / 1000000000L;
 
-      uint64_t net_delay_in_frames = stream_time_info_1.queued + stream_time_info_1.buffered;
+        uint64_t queued_and_buffered_frames =
+          stream_time_info_1.queued + stream_time_info_1.buffered;
 
       uint64_t fixed_delay_ns =
           (stream_time_info_1.delay * stream_time_info_1.rate.num * 1000000000L) /
           stream_time_info_1.rate.denom; // ns;
       uint64_t fixed_delay_in_frames = ((fixed_delay_ns * data.rate) + 500000000L) / 1000000000L;
 
-      net_delay_in_frames = net_delay_in_frames + fixed_delay_in_frames +
-                            audio_occupancy_now / (data.bytes_per_sample * data.channels) -
-                            frames_possibly_played_since_measurement;
+        uint64_t software_queue_frames =
+          audio_occupancy_now / (data.bytes_per_sample * data.channels);
+
+        uint64_t net_delay_in_frames = audio_pw_calculate_delay_frames(
+          queued_and_buffered_frames, 0, fixed_delay_in_frames, software_queue_frames,
+          frames_possibly_played_since_measurement);
 
       result = net_delay_in_frames;
       reply = 0;

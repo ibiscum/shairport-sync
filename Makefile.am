@@ -33,7 +33,7 @@ noinst_LIBRARIES =
 # See below for the flags for the test client program
 
 shairport_sync_SOURCES = shairport.c bonjour_strings.c mdns.c common.c rtp.c \
-	player.c audio.c loudness.c activity_monitor.c \
+  player.c audio.c loudness.c activity_monitor.c \
   rtsp.c \
   utilities/debug.c utilities/network_utilities.c utilities/rtsp_message_utilities.c \
   utilities/string_utilities.c \
@@ -172,8 +172,7 @@ endif
 if USE_AIRPLAY_2
 shairport_sync_SOURCES += ap2_buffered_audio_processor.c ap2_event_receiver.c \
   ap2_event_message_handler.c ptp-utilities.c \
-	utilities/ap2_packet_validation.c utilities/buffered_read.c \
-	utilities/structured_buffer.c utilities/mod23.c \
+  utilities/buffered_read.c utilities/structured_buffer.c utilities/mod23.c \
   utilities/generate_random_uuid.c utilities/generate_device_uuid.c \
   plists/get_info_response.c
 shairport_sync_LDADD += lib_pair_ap.a
@@ -358,25 +357,4 @@ if INSTALL_CONFIG_FILES
 
 install-exec-hook: install-config-files
 
-endif
-
-clean-local:
-	-find "$(abs_top_builddir)" -type f \( -name '*.gcda' -o -name '*.gcno' -o -name '*.gcov' -o -name '*.gcov.json.gz' -o -name 'coverage.html' \) -exec rm -f {} +
-
-distclean-local: clean-local
-
-if USE_CMOCKA_TESTS
-coverage:
-	$(MAKE) -C tests coverage
-
-coverage-text:
-	$(MAKE) -C tests coverage-text
-else
-coverage:
-	@echo "Coverage target unavailable: configure with CMocka tests enabled."
-	@exit 1
-
-coverage-text:
-	@echo "Coverage target unavailable: configure with CMocka tests enabled."
-	@exit 1
 endif
