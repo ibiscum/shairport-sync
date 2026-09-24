@@ -529,9 +529,12 @@ void metadata_mqtt_queue_init() {
 }
 void metadata_mqtt_queue_stop() {
   // debug(2, "metadata stop mqtt thread.");
-  pthread_cancel(metadata_mqtt_thread);
-  pthread_join(metadata_mqtt_thread, NULL);
-  pc_queue_delete(&metadata_mqtt_queue);
+  if (metadata_mqtt_thread) {
+    pthread_cancel(metadata_mqtt_thread);
+    pthread_join(metadata_mqtt_thread, NULL);
+    pc_queue_delete(&metadata_mqtt_queue);
+    metadata_mqtt_thread = 0;
+  }
   // debug(2, "metadata stop mqtt done.");
 }
 int send_metadata_to_mqtt_queue(const uint32_t type, const uint32_t code, const char *data,

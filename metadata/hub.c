@@ -151,7 +151,7 @@ void _metadata_hub_modify_prolog(const char *filename, const int linenumber) {
             last_metadata_hub_modify_prolog_line);
     else
       debug(2, "Metadata_hub write lock is already taken by unknown -- must wait.");
-    metadata_hub_re_lock_access_is_delayed = 0;
+    metadata_hub_re_lock_access_is_delayed = 1;
     pthread_rwlock_wrlock(&metadata_hub_re_lock);
     debug(3, "Okay -- acquired the metadata_hub write lock at \"%s:%d\".", filename, linenumber);
   } else {
@@ -279,7 +279,7 @@ char *metadata_write_image_file(const char *buf, int len) {
       path = malloc(pl + 1);
       snprintf(path, pl + 1, "%s/%s%s.%s", config.cover_art_cache_dir, prefix, img_md5_str, ext);
       int cover_fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRGRP | S_IROTH);
-      if (cover_fd > 0) {
+      if (cover_fd >= 0) {
         // write the contents
         if (write(cover_fd, buf, len) < len) {
           warn("Writing cover art file \"%s\" failed!", path);
@@ -302,7 +302,7 @@ char *metadata_write_image_file(const char *buf, int len) {
             memset(full_filename, 0, fnl);
             snprintf(full_filename, fnl, "%s%s.%s", prefix, img_md5_str, ext);
             int dir_fd = open(config.cover_art_cache_dir, O_DIRECTORY);
-            if (dir_fd > 0) {
+            if (dir_fd >= 0) {
               while ((dir = readdir(d)) != NULL) {
                 if (dir->d_type == DT_REG) {
                   if (strcmp(full_filename, dir->d_name) != 0) {
@@ -362,6 +362,10 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
   if (type == 'core') {
     switch (code) {
     case 'asdk': {
+      if (length < 1) {
+        debug(1, "MH Song Data Kind item too short: length %u.", length);
+        break;
+      }
       // get the one-byte number as an unsigned number
       int song_data_kind = data[0];           // one byte
       song_data_kind = song_data_kind & 0xFF; // unsigned
@@ -376,6 +380,10 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
     } break;
     case 'mper': {
+      if (length < 8) {
+        debug(1, "MH Item ID item too short: length %u.", length);
+        break;
+      }
       // get the 64-bit number as a uint64_t by reading two uint32_t s and combining them
       uint64_t vl = ntohl(*(uint32_t *)data); // get the high order 32 bits
       vl = vl << 32;                          // shift them into the correct location
@@ -391,6 +399,10 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
     } break;
     case 'astm': {
+      if (length < 4) {
+        debug(1, "MH Song Time item too short: length %u.", length);
+        break;
+      }
       uint32_t ui = ntohl(*(uint32_t *)data);
       debug(3, "MH Song Time seen: \"%u\" of length %u.", ui, length);
       if ((ui != metadata_store.songtime_in_milliseconds) ||
@@ -507,6 +519,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         metadata_packet_item_changed = 1;
       }
       free(cs);
+      break;
     default:
       /*
           {
@@ -556,8 +569,12 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         int oldState;
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldState); // make this un-cancellable
         char *pathname = metadata_write_image_file(data, length);
-        snprintf(uri, sizeof(uri), "file://%s", pathname);
-        free(pathname);
+        if (pathname) {
+          snprintf(uri, sizeof(uri), "file://%s", pathname);
+          free(pathname);
+        } else {
+          uri[0] = '\0';
+        }
         pthread_setcancelstate(oldState, NULL);
 
       } else {
@@ -760,9 +777,12 @@ void metadata_hub_queue_init() {
 
 void metadata_hub_queue_stop() {
   // debug(2, "metadata stop hub thread.");
-  pthread_cancel(metadata_hub_thread);
-  pthread_join(metadata_hub_thread, NULL);
-  pc_queue_delete(&metadata_hub_queue);
+  if (metadata_hub_thread) {
+    pthread_cancel(metadata_hub_thread);
+    pthread_join(metadata_hub_thread, NULL);
+    pc_queue_delete(&metadata_hub_queue);
+    metadata_hub_thread = 0;
+  }
   // debug(2, "metadata stop hub done.");
 }
 

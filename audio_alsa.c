@@ -28,11 +28,13 @@
 #define ALSA_PCM_NEW_HW_PARAMS_API
 
 #include <alsa/asoundlib.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <math.h>
 #include <memory.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "config.h"

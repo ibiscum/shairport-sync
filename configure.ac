@@ -45,6 +45,17 @@ AM_CONDITIONAL([USE_XMLTOMAN], [ test -n "$XMLTOMAN" ])
 
 PKG_PROG_PKG_CONFIG([0.9.0])
 
+AC_ARG_WITH([cmocka-tests],
+  [AS_HELP_STRING([--with-cmocka-tests],[build cmocka unit tests])],
+  [],
+  [with_cmocka_tests=no])
+
+if test "x$with_cmocka_tests" = "xyes" ; then
+  PKG_CHECK_MODULES([CMOCKA], [cmocka],,
+    [AC_MSG_ERROR([cmocka tests requested but cmocka was not found -- libcmocka-dev suggested!])])
+fi
+AM_CONDITIONAL([USE_CMOCKA_TESTS], [test "x$with_cmocka_tests" = "xyes"])
+
 # Checks for libraries.
 if test "x${with_os}" = xlinux -o "x${with_os}" = xfreebsd ; then
  AC_CHECK_LIB([rt],[clock_gettime], , AC_MSG_ERROR(librt needed))
@@ -597,7 +608,7 @@ AC_SUBST([SYSTEMD_WANTS_ARGS], [${systemd_wants_args}])
 # The man directory will not be recursively made unless you set the SUBDIR in Makefile.am.
 # But leave this as is to enable a distclean to be done.
 
-AC_CONFIG_FILES([Makefile man/Makefile])
+AC_CONFIG_FILES([Makefile man/Makefile tests/Makefile])
 
 AC_CONFIG_FILES([scripts/shairport-sync.service])
 AC_CONFIG_FILES([scripts/shairport-sync],[chmod +x scripts/shairport-sync])

@@ -25,6 +25,14 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+
+#ifndef SYSCONFDIR
+#define SYSCONFDIR "/etc"
+#endif
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>

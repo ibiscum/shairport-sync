@@ -8,7 +8,12 @@ homedir = @HOME@
 if USE_XMLTOMAN
   SUBDIRS = man
 else
+	SUBDIRS =
   man_MANS = $(top_srcdir)/man/shairport-sync.1
+endif
+
+if USE_CMOCKA_TESTS
+	SUBDIRS += tests
 endif
 
 lib_pair_ap_a_CFLAGS = -Wall -g -DCONFIG_GCRYPT -pthread --include=utilities/debug.h
@@ -125,7 +130,7 @@ shairport_sync_SOURCES += audio_pa.c
 endif
 
 if USE_PIPEWIRE
-shairport_sync_SOURCES += audio_pw.c
+shairport_sync_SOURCES += audio_pw.c utilities/audio_pw_safety.c
 endif
 
 if USE_CONVOLUTION

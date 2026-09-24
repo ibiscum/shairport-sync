@@ -2,6 +2,7 @@
 #include "core.h"
 #include "pc_queue.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,6 +29,9 @@ int send_metadata_to_multicast_queue(const uint32_t type, const uint32_t code, c
 void metadata_create_multicast_socket(void) {
   if (config.metadata_enabled == 0)
     return;
+
+  // If called again, dispose existing resources first.
+  metadata_delete_multicast_socket();
 
   // Unlike metadata pipe, socket is opened once and stays open,
   // so we can call it in create
@@ -58,15 +62,34 @@ void metadata_delete_multicast_socket(void) {
   if (metadata_sock != -1) {
     shutdown(metadata_sock, SHUT_RDWR); // we want to immediately deallocate the buffer
     close(metadata_sock);
+    metadata_sock = -1;
   }
-  if (metadata_sockmsg)
+  if (metadata_sockmsg) {
     free(metadata_sockmsg);
+    metadata_sockmsg = NULL;
+  }
 }
 
 void metadata_multicast_process(uint32_t type, uint32_t code, char *data, uint32_t length) {
   // debug(1, "Process multicast metadata with type %x, code %x and length %u.", type, code,
   // length);
-  if (metadata_sock >= 0 && length < config.metadata_sockmsglength - 8) {
+  if (metadata_sock < 0)
+    return;
+
+  if ((length > 0) && (data == NULL)) {
+    debug(1, "Multicast metadata item with length %u has NULL data. Ignoring.", length);
+    return;
+  }
+
+  size_t sockmsg_len = config.metadata_sockmsglength;
+  if (sockmsg_len <= 24) {
+    debug(1,
+          "Invalid metadata_sockmsglength value %zu for multicast metadata. Must be > 24.",
+          sockmsg_len);
+    return;
+  }
+
+  if (length < sockmsg_len - 8) {
     char *ptr = metadata_sockmsg;
     uint32_t v;
     v = htonl(type);
@@ -76,17 +99,17 @@ void metadata_multicast_process(uint32_t type, uint32_t code, char *data, uint32
     memcpy(ptr, &v, 4);
     ptr += 4;
     memcpy(ptr, data, length);
-    sendto(metadata_sock, metadata_sockmsg, length + 8, 0, (struct sockaddr *)&metadata_sockaddr,
-           sizeof(metadata_sockaddr));
-  } else if (metadata_sock >= 0) {
+    if (sendto(metadata_sock, metadata_sockmsg, length + 8, 0,
+               (struct sockaddr *)&metadata_sockaddr, sizeof(metadata_sockaddr)) == -1)
+      debug(1, "Error %d sending multicast metadata packet.", errno);
+  } else {
     // send metadata in numbered chunks using the protocol:
     // ("ssnc", "chnk", packet_ix, packet_counts, packet_tag, packet_type, chunked_data)
 
     uint32_t chunk_ix = 0;
-    if (config.metadata_sockmsglength == 24)
-      die("A divide by zero almost occurred (config.metadata_sockmsglength = 24).");
-    uint32_t chunk_total = length / (config.metadata_sockmsglength - 24);
-    if (chunk_total * (config.metadata_sockmsglength - 24) < length) {
+    size_t chunk_payload_capacity = sockmsg_len - 24;
+    uint32_t chunk_total = length / chunk_payload_capacity;
+    if (chunk_total * chunk_payload_capacity < length) {
       chunk_total++;
     }
     uint32_t remaining = length;
@@ -109,13 +132,14 @@ void metadata_multicast_process(uint32_t type, uint32_t code, char *data, uint32
       memcpy(ptr, &v, 4);
       ptr += 4;
       size_t datalen = remaining;
-      if (datalen > config.metadata_sockmsglength - 24) {
-        datalen = config.metadata_sockmsglength - 24;
+      if (datalen > chunk_payload_capacity) {
+        datalen = chunk_payload_capacity;
       }
       memcpy(ptr, data_crsr, datalen);
       data_crsr += datalen;
-      sendto(metadata_sock, metadata_sockmsg, datalen + 24, 0,
-             (struct sockaddr *)&metadata_sockaddr, sizeof(metadata_sockaddr));
+      if (sendto(metadata_sock, metadata_sockmsg, datalen + 24, 0,
+                 (struct sockaddr *)&metadata_sockaddr, sizeof(metadata_sockaddr)) == -1)
+        debug(1, "Error %d sending chunked multicast metadata packet.", errno);
       chunk_ix++;
       remaining -= datalen;
       if (remaining == 0)
@@ -174,6 +198,7 @@ void metadata_multicast_queue_stop() {
     pthread_cancel(metadata_multicast_thread);
     pthread_join(metadata_multicast_thread, NULL);
     pc_queue_delete(&metadata_multicast_queue);
+    metadata_multicast_thread = 0;
     // debug(2, "metadata stop multicast done.");
   }
 }

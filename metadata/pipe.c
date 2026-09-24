@@ -14,6 +14,28 @@ pc_queue metadata_queue;
 metadata_package metadata_queue_items[metadata_queue_size];
 pthread_t metadata_thread;
 
+static void metadata_close(void);
+
+static int metadata_write_all(const char *buffer, size_t count) {
+  if ((fd < 0) || (buffer == NULL))
+    return -1;
+
+  size_t sent = 0;
+  while (sent < count) {
+    ssize_t ret = write(fd, buffer + sent, count - sent);
+    if (ret > 0) {
+      sent += ret;
+    } else if ((ret < 0) && (errno == EINTR)) {
+      continue;
+    } else {
+      metadata_close();
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
 void metadata_open(void) {
   if (config.metadata_enabled == 0)
     return;
@@ -21,6 +43,10 @@ void metadata_open(void) {
   size_t pl = strlen(config.metadata_pipename) + 1;
 
   char *path = malloc(pl + 1);
+  if (path == NULL) {
+    debug(1, "Can not allocate memory for metadata pipe path.");
+    return;
+  }
   snprintf(path, pl + 1, "%s", config.metadata_pipename);
 
   fd = try_to_open_pipe_for_writing(path);
@@ -46,17 +72,15 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
   char thestring[1024];
   snprintf(thestring, 1024, "<item><type>%x</type><code>%x</code><length>%u</length>", type, code,
            length);
-  // ret = non_blocking_write(fd, thestring, strlen(thestring));
-  ret = write(fd, thestring, strlen(thestring));
-  if (ret < 0) {
+  ret = metadata_write_all(thestring, strlen(thestring));
+  if (ret != 0) {
     // debug(1,"metadata_process error %d exit 1",ret);
     return;
   }
   if ((data != NULL) && (length > 0)) {
     snprintf(thestring, 1024, "\n<data encoding=\"base64\">\n");
-    // ret = non_blocking_write(fd, thestring, strlen(thestring));
-    ret = write(fd, thestring, strlen(thestring));
-    if (ret < 0) {
+    ret = metadata_write_all(thestring, strlen(thestring));
+    if (ret != 0) {
       // debug(1,"metadata_process error %d exit 2",ret);
       return;
     }
@@ -78,9 +102,8 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
         debug(1, "Error encoding base64 data.");
       // debug(1,"Remaining count: %d ret: %d, outbuf_size:
       // %d.",remaining_count,ret,outbuf_size);
-      // ret = non_blocking_write(fd, outbuf, outbuf_size);
-      ret = write(fd, outbuf, outbuf_size);
-      if (ret < 0) {
+      ret = metadata_write_all(outbuf, outbuf_size);
+      if (ret != 0) {
         // debug(1,"metadata_process error %d exit 3",ret);
         return;
       }
@@ -88,17 +111,15 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
       remaining_count -= towrite_count;
     }
     snprintf(thestring, 1024, "</data>");
-    // ret = non_blocking_write(fd, thestring, strlen(thestring));
-    ret = write(fd, thestring, strlen(thestring));
-    if (ret < 0) {
+    ret = metadata_write_all(thestring, strlen(thestring));
+    if (ret != 0) {
       // debug(1,"metadata_process error %d exit 4",ret);
       return;
     }
   }
   snprintf(thestring, 1024, "</item>\n");
-  // ret = non_blocking_write(fd, thestring, strlen(thestring));
-  ret = write(fd, thestring, strlen(thestring));
-  if (ret < 0) {
+  ret = metadata_write_all(thestring, strlen(thestring));
+  if (ret != 0) {
     // debug(1,"metadata_process error %d exit 5",ret);
     return;
   }
@@ -137,6 +158,8 @@ void metadata_pipe_queue_init() {
   // create the metadata pipe, if necessary
   size_t pl = strlen(config.metadata_pipename) + 1;
   char *path = malloc(pl + 1);
+  if (path == NULL)
+    die("Can not allocate memory for metadata pipe path.");
   snprintf(path, pl + 1, "%s", config.metadata_pipename);
   mode_t oldumask = umask(000);
   if (mkfifo(path, 0666) && errno != EEXIST)
@@ -165,8 +188,11 @@ void metadata_pipe_queue_init() {
                 metadata_queue_size, "pipe");
 
   if (named_pthread_create(&metadata_thread, NULL, metadata_thread_function, NULL,
-                           "metadata pipe") != 0)
+                           "metadata pipe") != 0) {
     debug(1, "Failed to create metadata thread!");
+    pc_queue_delete(&metadata_queue);
+    metadata_close();
+  }
 }
 
 void metadata_pipe_queue_stop() {
@@ -175,6 +201,7 @@ void metadata_pipe_queue_stop() {
     pthread_cancel(metadata_thread);
     pthread_join(metadata_thread, NULL);
     pc_queue_delete(&metadata_queue);
+    metadata_thread = 0;
     // debug(2, "metadata_stop finished successfully.");
   }
 }

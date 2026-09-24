@@ -1,5 +1,7 @@
 ## Shairport Sync D-Bus Interface
 
+Implementation flow details for the D-Bus service code are documented in [DBus-Service-Flow.md](DBus-Service-Flow.md).
+
 Shairport Sync can have a D-Bus interface, which can be used to control aspects of its operation and get status information from it.
 
 For Classic AirPlay only, remote control commands, for example `play`, `pause` and volume control, can be sent to the player.

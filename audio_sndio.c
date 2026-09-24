@@ -21,6 +21,7 @@
 #include "audio.h"
 #include "common.h"
 #include <errno.h>
+#include <getopt.h>
 #include <pthread.h>
 #include <sndio.h>
 #include <stdio.h>
