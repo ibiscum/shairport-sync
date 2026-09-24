@@ -67,6 +67,30 @@ pthread_t dacp_monitor_thread;
 dacp_server_record dacp_server;
 void *mdns_dacp_monitor_private_storage_pointer;
 
+static int dacp_scan_max_bad_response_count(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.scan_max_bad_response_count;
+#else
+  return 10;
+#endif
+}
+
+static int dacp_scan_interval_when_active(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.scan_interval_when_active;
+#else
+  return 1;
+#endif
+}
+
+static int dacp_scan_interval_when_inactive(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.scan_interval_when_inactive;
+#else
+  return 3;
+#endif
+}
+
 // HTTP Response data/funcs (See the tinyhttp example.cpp file for more on this.)
 struct HttpResponse {
   void *body;            // this will be a malloc'ed pointer
@@ -523,6 +547,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
   //  debug(1, "dacp_monitor_thread_code PID %d", syscall(SYS_gettid));
   // int scan_index = 0;
   int always_use_revision_number_1 = 0;
+  char snapshot_dacp_id[sizeof(dacp_server.dacp_id)] = {'\0'};
   // char server_reply[10000];
   // debug(1, "DACP monitor thread started.");
   // wait until we get a valid port number to begin monitoring it
@@ -588,14 +613,15 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
 
     always_use_revision_number_1 =
         dacp_server.always_use_revision_number_1; // set this while access is locked
+    dacp_safe_copy_string(snapshot_dacp_id, sizeof(snapshot_dacp_id), dacp_server.dacp_id);
 
     result = dacp_get_volume(&the_volume); // just want the http code
     pthread_cleanup_pop(1);
 
     if (result == 490) { // 490 means no port was specified
-      if (strlen(dacp_server.dacp_id) != 0) {
+      if (strlen(snapshot_dacp_id) != 0) {
         // debug(1,"mdns_dacp_monitor_set_id");
-        mdns_dacp_monitor_set_id(dacp_server.dacp_id);
+        mdns_dacp_monitor_set_id(snapshot_dacp_id);
       }
     } else {
       // scan_index++;
@@ -604,7 +630,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
       if ((result == 200) || (result == 400)) {
         bad_result_count = 0;
       } else {
-        if (bad_result_count < config.scan_max_bad_response_count) // limit to some reasonable value
+        if (bad_result_count < dacp_scan_max_bad_response_count()) // limit to some reasonable value
           bad_result_count++;
       }
 
@@ -626,7 +652,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
         else if (result == 400)
           advanced_dacp_server_status_now = 0;
       } else if (bad_result_count ==
-                 config.scan_max_bad_response_count) { // if a sequence of bad return codes occurs,
+                 dacp_scan_max_bad_response_count()) { // if a sequence of bad return codes occurs,
                                                        // then it's gone
         dacp_server_status_now = 0;
         advanced_dacp_server_status_now = 0;
@@ -723,11 +749,15 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
 
                 switch (type) {
                 case 'cmsr': // revision number
+                  if (item_size < 4)
+                    break;
                   t = sp - item_size;
                   revision_number = ntohl(*(uint32_t *)(t));
                   // debug(1,"New revision number received: %d", revision_number);
                   break;
                 case 'caps': // play status
+                  if (item_size < 1)
+                    break;
                   t = sp - item_size;
                   r = *(unsigned char *)(t);
                   switch (r) {
@@ -755,6 +785,8 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   }
                   break;
                 case 'cash': // shuffle status
+                  if (item_size < 1)
+                    break;
                   t = sp - item_size;
                   r = *(unsigned char *)(t);
                   switch (r) {
@@ -776,6 +808,8 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   }
                   break;
                 case 'carp': // repeat status
+                  if (item_size < 1)
+                    break;
                   t = sp - item_size;
                   r = *(unsigned char *)(t);
                   switch (r) {
@@ -961,9 +995,9 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
       }
       */
       if (metadata_store.player_thread_active)
-        sleep(config.scan_interval_when_active);
+        sleep(dacp_scan_interval_when_active());
       else
-        sleep(config.scan_interval_when_inactive);
+        sleep(dacp_scan_interval_when_inactive());
     }
   }
   debug(1, "DACP monitor thread exiting -- should never happen.");
@@ -972,6 +1006,10 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
 
 void dacp_monitor_start() {
   int rc;
+  int conversation_lock_initialised = 0;
+  int server_information_lock_initialised = 0;
+  int condition_initialised = 0;
+  int mta_initialised = 0;
 
   pthread_mutex_lock(&dacp_monitor_lifecycle_lock);
   if (dacp_monitor_initialised != 0) {
@@ -980,59 +1018,109 @@ void dacp_monitor_start() {
   }
 
   rc = pthread_cond_init(&dacp_server_information_cv, NULL);
-  if (rc)
+  if (rc) {
     debug(1, "Error initialising the DACP Server Information Condition Variable");
+    goto fail;
+  }
+  condition_initialised = 1;
 
   pthread_mutexattr_t mta;
 
   rc = pthread_mutexattr_init(&mta);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Conversation Lock Mutex Att Init");
+    goto fail;
+  }
+  mta_initialised = 1;
 
   rc = pthread_mutexattr_settype(&mta, PTHREAD_MUTEX_ERRORCHECK);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Conversation Lock Mutex Errorcheck");
+    goto fail;
+  }
 
   // rc = pthread_mutexattr_setname_np(&mta, "DACP Conversation Lock");
   // if (rc)
   //  debug(1,"Error creating the DACP Conversation Lock Mutex Set Name");
 
   rc = pthread_mutex_init(&dacp_conversation_lock, &mta);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Conversation Lock Mutex Init");
+    goto fail;
+  }
+  conversation_lock_initialised = 1;
   // else
   //  debug(1, "DACP Conversation Lock Mutex Init");
 
   rc = pthread_mutexattr_destroy(&mta);
   if (rc)
     debug(1, "Error creating the DACP Conversation Lock Attr Destroy");
+  mta_initialised = 0;
 
   rc = pthread_mutexattr_init(&mta);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Server Information Lock Mutex Att Init");
+    goto fail;
+  }
+  mta_initialised = 1;
 
   rc = pthread_mutexattr_settype(&mta, PTHREAD_MUTEX_ERRORCHECK);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Server Information Lock Mutex Errorcheck");
+    goto fail;
+  }
 
   // rc = pthread_mutexattr_setname_np(&mta, "DACP Conversation Lock");
   // if (rc)
   //  debug(1,"Error creating the DACP Server Information Lock Mutex Set Name");
 
   rc = pthread_mutex_init(&dacp_server_information_lock, &mta);
-  if (rc)
+  if (rc) {
     debug(1, "Error creating the DACP Server Information Lock Mutex Init");
+    goto fail;
+  }
+  server_information_lock_initialised = 1;
 
   rc = pthread_mutexattr_destroy(&mta);
   if (rc)
     debug(1, "Error creating the DACP Server Information Lock Attr Destroy");
+  mta_initialised = 0;
 
   memset(&dacp_server, 0, sizeof(dacp_server_record));
 
   int thread_create_response =
       named_pthread_create(&dacp_monitor_thread, NULL, dacp_monitor_thread_code, NULL, "dacp");
-  if (thread_create_response == 0)
+  if (thread_create_response == 0) {
     dacp_monitor_initialised = 1;
+  } else {
+    debug(1, "Error creating DACP monitor thread.");
+    goto fail;
+  }
+  pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
+  return;
+
+fail:
+  if (mta_initialised) {
+    int mta_destroy_rc = pthread_mutexattr_destroy(&mta);
+    if (mta_destroy_rc)
+      debug(1, "Error cleaning up DACP mutex attributes after startup failure.");
+  }
+  if (server_information_lock_initialised) {
+    int destroy_rc = pthread_mutex_destroy(&dacp_server_information_lock);
+    if (destroy_rc)
+      debug(1, "Error cleaning up DACP server information mutex after startup failure.");
+  }
+  if (conversation_lock_initialised) {
+    int destroy_rc = pthread_mutex_destroy(&dacp_conversation_lock);
+    if (destroy_rc)
+      debug(1, "Error cleaning up DACP conversation mutex after startup failure.");
+  }
+  if (condition_initialised) {
+    int destroy_rc = pthread_cond_destroy(&dacp_server_information_cv);
+    if (destroy_rc)
+      debug(1, "Error cleaning up DACP condition variable after startup failure.");
+  }
+  dacp_monitor_initialised = 0;
   pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
 }
 
@@ -1182,15 +1270,21 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
             speaker_info[speaker_index].volume = 0;
             speaker_info[speaker_index].name[0] = '\0';
           } else {
+            if (speaker_index < 0)
+              continue;
             char *t;
             // char u;
             int32_t r;
             int64_t s, v;
             switch (type) {
             case 'minm':
+              if (item_size <= 0)
+                break;
               t = sp - item_size;
-              strncpy((char *)&speaker_info[speaker_index].name, t,
-                      sizeof(speaker_info[speaker_index].name));
+              size_t copy_size = sizeof(speaker_info[speaker_index].name) - 1;
+              if ((size_t)item_size < copy_size)
+                copy_size = item_size;
+              memcpy((char *)&speaker_info[speaker_index].name, t, copy_size);
               speaker_info[speaker_index].name[sizeof(speaker_info[speaker_index].name) - 1] =
                   '\0'; // just in case
               break;

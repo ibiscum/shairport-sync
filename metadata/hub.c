@@ -29,6 +29,10 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,9 +40,14 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
 
 #include "config.h"
 
@@ -72,6 +81,22 @@ struct metadata_bundle metadata_store;
 int metadata_hub_initialised = 0;
 
 pthread_rwlock_t metadata_hub_re_lock = PTHREAD_RWLOCK_INITIALIZER;
+
+static const char *metadata_hub_cover_art_cache_dir(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.cover_art_cache_dir;
+#else
+  return "";
+#endif
+}
+
+static int metadata_hub_retain_coverart(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.retain_coverart;
+#else
+  return 1;
+#endif
+}
 
 int string_update(char **str, int *flag, char *s) {
   if (s)
@@ -210,8 +235,9 @@ char *metadata_write_image_file(const char *buf, int len) {
   // it will return a path to the image file allocated with malloc.
   // free it if you don't need it.
 
-  char *path = NULL;                                 // this will be what is returned
-  if (strcmp(config.cover_art_cache_dir, "") != 0) { // an empty string means do not write the file
+  char *path = NULL; // this will be what is returned
+  const char *cover_art_cache_dir = metadata_hub_cover_art_cache_dir();
+  if (strcmp(cover_art_cache_dir, "") != 0) { // an empty string means do not write the file
 
     uint8_t img_md5[16];
     // uint8_t ap_md5[16];
@@ -266,18 +292,18 @@ char *metadata_write_image_file(const char *buf, int len) {
       ext = jpg;
     }
     mode_t oldumask = umask(000);
-    int result = mkpath(config.cover_art_cache_dir, 0777);
+    int result = mkpath(cover_art_cache_dir, 0777);
     umask(oldumask);
     if ((result == 0) || (result == -EEXIST)) {
       // see if the file exists by opening it.
       // if it exists, we're done
       char *prefix = "cover-";
 
-      size_t pl = strlen(config.cover_art_cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) +
-                  1 + strlen(ext);
+      size_t pl = strlen(cover_art_cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) + 1 +
+          strlen(ext);
 
       path = malloc(pl + 1);
-      snprintf(path, pl + 1, "%s/%s%s.%s", config.cover_art_cache_dir, prefix, img_md5_str, ext);
+      snprintf(path, pl + 1, "%s/%s%s.%s", cover_art_cache_dir, prefix, img_md5_str, ext);
       int cover_fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRGRP | S_IROTH);
       if (cover_fd >= 0) {
         // write the contents
@@ -289,10 +315,10 @@ char *metadata_write_image_file(const char *buf, int len) {
         close(cover_fd);
 
         // now delete all other files, if requested
-        if (config.retain_coverart == 0) {
+        if (metadata_hub_retain_coverart() == 0) {
           DIR *d;
           struct dirent *dir;
-          d = opendir(config.cover_art_cache_dir);
+          d = opendir(cover_art_cache_dir);
           if (d) {
             int fnl = strlen(prefix) + strlen(img_md5_str) + 1 + strlen(ext) + 1;
 
@@ -301,7 +327,7 @@ char *metadata_write_image_file(const char *buf, int len) {
               die("Can't allocate memory at metadata_write_image_file.");
             memset(full_filename, 0, fnl);
             snprintf(full_filename, fnl, "%s%s.%s", prefix, img_md5_str, ext);
-            int dir_fd = open(config.cover_art_cache_dir, O_DIRECTORY);
+            int dir_fd = open(cover_art_cache_dir, O_DIRECTORY);
             if (dir_fd >= 0) {
               while ((dir = readdir(d)) != NULL) {
                 if (dir->d_type == DT_REG) {
@@ -313,10 +339,10 @@ char *metadata_write_image_file(const char *buf, int len) {
                 }
               }
               if (close(dir_fd) < 0)
-                debug(1, "Error %d closing directory \"%s\"", errno, config.cover_art_cache_dir);
+                debug(1, "Error %d closing directory \"%s\"", errno, cover_art_cache_dir);
             } else {
               debug(1, "Can't open the directory \"%s\" for deletion -- error %d.",
-                    config.cover_art_cache_dir, errno);
+                    cover_art_cache_dir, errno);
             }
             free(full_filename);
             closedir(d);
@@ -334,7 +360,7 @@ char *metadata_write_image_file(const char *buf, int len) {
       }
     } else {
       debug(1, "Couldn't access or create the cover art cache directory \"%s\".",
-            config.cover_art_cache_dir);
+            cover_art_cache_dir);
     }
   }
   return path;
@@ -563,8 +589,9 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       debug(3, "MH Picture received, length %u bytes.", length);
 
       char uri[2048];
+      const char *cover_art_cache_dir = metadata_hub_cover_art_cache_dir();
       if ((length > 16) &&
-          (strcmp(config.cover_art_cache_dir, "") != 0)) { // if it's okay to write the file
+          (strcmp(cover_art_cache_dir, "") != 0)) { // if it's okay to write the file
                                                            // make this uncancellable
         int oldState;
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldState); // make this un-cancellable
