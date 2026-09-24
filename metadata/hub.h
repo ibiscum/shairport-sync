@@ -189,7 +189,7 @@ void _metadata_hub_read_epilog(const char *filename, const int linenumber);
   _metadata_hub_modify_epilog(modified, __FILE__, __LINE__)
 
 #define metadata_hub_read_prolog(void) _metadata_hub_read_prolog(__FILE__, __LINE__)
-#define metadata_hub_read_epilog(void) _metadata_hub_modify_epilog(__FILE__, __LINE__)
+#define metadata_hub_read_epilog(void) _metadata_hub_modify_epilog(0, __FILE__, __LINE__)
 
 // metadata queue stuff
 void metadata_hub_queue_init();

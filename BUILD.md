@@ -265,6 +265,22 @@ $ journalctl --user -u shairport-sync.service -f
 
 ## Realtime Properties
 
+Use this checklist to quickly confirm and fix realtime (RT) scheduling for Shairport Sync.
+
+In command examples below, do not type the leading prompt symbols (`$` or `#`). Type only the command that follows.
+
+### Realtime Checklist
+
+- [ ] Confirm which service mode you are using:
+    - user service if PipeWire or PulseAudio is installed and used.
+    - system service if using ALSA directly without PipeWire / PulseAudio.
+- [ ] Check logs for RT warnings:
+    - `Can not set realtime properties of thread "player_1".`
+- [ ] Check the active manager limits (`LimitRTPRIO`, `LimitNICE`).
+- [ ] If limits are zero, add an override and restart the manager/service.
+- [ ] Verify limits on the running Shairport Sync process via `/proc/<pid>/limits`.
+- [ ] Re-check logs to ensure the RT warning is gone.
+
 If you see a message like this in the logs:
 ```
 Can not set realtime properties of thread "player_1".
@@ -301,6 +317,67 @@ Verify that limits are now applied to the running Shairport Sync process:
 $ pid=$(systemctl --user show -p MainPID --value shairport-sync.service)
 $ cat /proc/$pid/limits | grep -E "Max realtime priority|Max nice priority"
 ```
+
+If you are running Shairport Sync as a system service, verify limits on the system-service process instead:
+```
+$ pid=$(systemctl show -p MainPID --value shairport-sync.service)
+$ cat /proc/$pid/limits | grep -E "Max realtime priority|Max nice priority"
+```
+
+### Debian / Raspberry Pi OS / Ubuntu Notes
+
+On Debian-family systems, the following commands are useful to diagnose and apply RT settings.
+
+1. Check if you are in user-service mode and whether PipeWire/PulseAudio exists:
+```
+$ systemctl --user status pipewire
+$ systemctl --user status pulseaudio
+```
+
+2. Check user-manager limits and any drop-in files currently applied:
+```
+$ id -u
+$ systemctl show user@$(id -u).service -p LimitRTPRIO -p LimitNICE -p LimitMEMLOCK
+$ systemctl cat user@$(id -u).service
+```
+
+3. If needed, create/update the user-manager drop-in override:
+```
+# sudo mkdir -p /etc/systemd/system/user@.service.d
+# sudo tee /etc/systemd/system/user@.service.d/10-realtime.conf >/dev/null <<'EOF'
+[Service]
+LimitRTPRIO=95
+LimitNICE=-20
+LimitMEMLOCK=infinity
+EOF
+```
+
+4. Reload and restart:
+```
+# sudo systemctl daemon-reload
+# sudo systemctl restart user@$(id -u).service
+$ systemctl --user restart shairport-sync.service
+```
+
+5. Verify limits for the running process:
+```
+$ pid=$(systemctl --user show -p MainPID --value shairport-sync.service)
+$ cat /proc/$pid/limits | grep -E "Max realtime priority|Max nice priority|Max locked memory"
+```
+
+6. If running as a system service on Debian-family systems, inspect the installed unit and confirm RT limit is present:
+```
+$ systemctl cat shairport-sync.service
+$ systemctl show shairport-sync.service -p User -p Group -p LimitRTPRIO
+```
+
+7. Finally, confirm there are no RT warnings in logs. Use the command matching your service mode:
+```
+$ journalctl --user -u shairport-sync.service -b | grep -F "Can not set realtime properties"
+$ journalctl -u shairport-sync.service -b | grep -F "Can not set realtime properties"
+```
+For user-service mode, use the first command. For system-service mode, use the second command.
+No output means the warning was not seen in the current boot.
 
 ##### User Service Limitations.
 1. If Shairport Sync is installed as a user service, it is activated when that user logs in and deactivated when the user logs out.

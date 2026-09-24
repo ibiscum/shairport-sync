@@ -130,7 +130,7 @@ shairport_sync_SOURCES += audio_pa.c
 endif
 
 if USE_PIPEWIRE
-shairport_sync_SOURCES += audio_pw.c
+shairport_sync_SOURCES += audio_pw.c utilities/audio_pw_safety.c
 endif
 
 if USE_CONVOLUTION

@@ -45,6 +45,7 @@
 
 #include "metadata/hub.h"
 #include "tinyhttp/http.h"
+#include "utilities/dacp_safety.h"
 #include "utilities/network_utilities.h"
 
 typedef struct {
@@ -137,6 +138,7 @@ static const struct http_funcs responseFuncs = {
 static pthread_mutex_t dacp_conversation_lock;
 static pthread_mutex_t dacp_server_information_lock;
 static pthread_cond_t dacp_server_information_cv;
+static pthread_mutex_t dacp_monitor_lifecycle_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void addrinfo_cleanup(void *arg) {
   // debug(1, "addrinfo cleanup called.");
@@ -160,7 +162,31 @@ int dacp_send_command(const char *command, char **body, ssize_t *bodysize) {
   int result;
   // debug(1,"dacp_send_command: command is: \"%s\".",command);
 
-  if (dacp_server.port == 0) {
+  uint16_t snapshot_port = 0;
+  short snapshot_connection_family = AF_UNSPEC;
+  uint32_t snapshot_scope_id = 0;
+  char snapshot_ip_string[INET6_ADDRSTRLEN] = {'\0'};
+  char snapshot_active_remote_id[256] = {'\0'};
+
+  if (dacp_monitor_initialised) {
+    pthread_mutex_lock(&dacp_server_information_lock);
+    snapshot_port = dacp_server.port;
+    snapshot_connection_family = dacp_server.connection_family;
+    snapshot_scope_id = dacp_server.scope_id;
+    dacp_safe_copy_string(snapshot_ip_string, sizeof(snapshot_ip_string), dacp_server.ip_string);
+    dacp_safe_copy_string(snapshot_active_remote_id, sizeof(snapshot_active_remote_id),
+                          dacp_server.active_remote_id);
+    pthread_mutex_unlock(&dacp_server_information_lock);
+  } else {
+    snapshot_port = dacp_server.port;
+    snapshot_connection_family = dacp_server.connection_family;
+    snapshot_scope_id = dacp_server.scope_id;
+    dacp_safe_copy_string(snapshot_ip_string, sizeof(snapshot_ip_string), dacp_server.ip_string);
+    dacp_safe_copy_string(snapshot_active_remote_id, sizeof(snapshot_active_remote_id),
+                          dacp_server.active_remote_id);
+  }
+
+  if (snapshot_port == 0) {
     // debug(3, "No DACP port specified yet");
     result = 490; // no port specified
   } else {
@@ -189,12 +215,12 @@ int dacp_send_command(const char *command, char **body, ssize_t *bodysize) {
 
     char portstring[10], server[1024], message[1024];
     memset(&portstring, 0, sizeof(portstring));
-    if (dacp_server.connection_family == AF_INET6) {
-      snprintf(server, sizeof(server), "%s%%%u", dacp_server.ip_string, dacp_server.scope_id);
+    if (snapshot_connection_family == AF_INET6) {
+      snprintf(server, sizeof(server), "%s%%%u", snapshot_ip_string, snapshot_scope_id);
     } else {
-      strcpy(server, dacp_server.ip_string);
+      dacp_safe_copy_string(server, sizeof(server), snapshot_ip_string);
     }
-    snprintf(portstring, sizeof(portstring), "%u", dacp_server.port);
+    snprintf(portstring, sizeof(portstring), "%u", snapshot_port);
 
     // first, load up address structs with getaddrinfo():
 
@@ -250,8 +276,7 @@ int dacp_send_command(const char *command, char **body, ssize_t *bodysize) {
 
             snprintf(message, sizeof(message),
                      "GET /ctrl-int/1/%s HTTP/1.1\r\nHost: %s:%u\r\nActive-Remote: %s\r\n\r\n",
-                     command, dacp_server.ip_string, dacp_server.port,
-                     dacp_server.active_remote_id);
+                     command, snapshot_ip_string, snapshot_port, snapshot_active_remote_id);
 
             // Send command
             debug(3, "dacp_send_command: \"%s\".", command);
@@ -404,14 +429,15 @@ void set_dacp_server_information(rtsp_conn_info *conn) {
 
   if ((conn->dacp_id == NULL) || (strcmp(conn->dacp_id, dacp_server.dacp_id) != 0)) {
     if (conn->dacp_id)
-      strncpy(dacp_server.dacp_id, conn->dacp_id, sizeof(dacp_server.dacp_id) - 1);
+      dacp_safe_copy_string(dacp_server.dacp_id, sizeof(dacp_server.dacp_id), conn->dacp_id);
     else
       dacp_server.dacp_id[0] = '\0';
     dacp_server.port = 0;
     dacp_server.scan_enable = 0;
     dacp_server.connection_family = conn->connection_ip_family;
     dacp_server.scope_id = conn->self_scope_id;
-    strncpy(dacp_server.ip_string, conn->client_ip_string, INET6_ADDRSTRLEN);
+    dacp_safe_copy_string(dacp_server.ip_string, sizeof(dacp_server.ip_string),
+                conn->client_ip_string);
     debug(2, "set_dacp_server_information set IP to \"%s\" and DACP id to \"%s\".",
           dacp_server.ip_string, dacp_server.dacp_id);
 
@@ -670,20 +696,23 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
           // if (0) {
           char *sp = response;
           if (le >= 8) {
+            ssize_t remaining = le;
+            uint32_t type;
             // here start looking for the contents of the status update
-            if (dacp_tlv_crawl(&sp, &item_size) == 'cmst') { // status
+            if ((dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) == 0) &&
+                (type == 'cmst')) { // status
               // here, we know that we are receiving playerstatusupdates, so set a flag
               metadata_hub_modify_prolog();
               // debug(1, "playstatusupdate release track metadata");
               // metadata_hub_reset_track_metadata();
               // metadata_store.playerstatusupdates_are_received = 1;
               sp -= item_size; // drop down into the array -- don't skip over it
-              le -= 8;
+              remaining += item_size;
               // char typestring[5];
               // we need to acquire the metadata data structure and possibly update it
-              while (le >= 8) {
-                uint32_t type = dacp_tlv_crawl(&sp, &item_size);
-                le -= item_size + 8;
+              while (remaining >= 8) {
+                if (dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) != 0)
+                  break;
                 char *t;
                 // char u;
                 // char *st;
@@ -807,26 +836,32 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                 case 'canp': // nowplaying 4 ids: dbid, plid, playlistItem, itemid (from mellowware
                              // see reference above)
                   debug(2, "DACP Composite ID seen");
-                  if ((metadata_store.item_composite_id_is_valid == 0) ||
-                      (memcmp(metadata_store.item_composite_id, sp - item_size,
-                              sizeof(metadata_store.item_composite_id)) != 0)) {
-                    memcpy(metadata_store.item_composite_id, sp - item_size,
-                           sizeof(metadata_store.item_composite_id));
-                    char st[33];
-                    char *pt = st;
-                    int it;
-                    for (it = 0; it < 16; it++) {
-                      snprintf(pt, 3, "%02X", metadata_store.item_composite_id[it]);
-                      pt += 2;
+                  if (item_size == (int32_t)sizeof(metadata_store.item_composite_id)) {
+                    if ((metadata_store.item_composite_id_is_valid == 0) ||
+                        (memcmp(metadata_store.item_composite_id, sp - item_size,
+                                sizeof(metadata_store.item_composite_id)) != 0)) {
+                      memcpy(metadata_store.item_composite_id, sp - item_size,
+                             sizeof(metadata_store.item_composite_id));
+                      char st[33];
+                      char *pt = st;
+                      int it;
+                      for (it = 0; it < 16; it++) {
+                        snprintf(pt, 3, "%02X", metadata_store.item_composite_id[it]);
+                        pt += 2;
+                      }
+                      *pt = 0;
+                      debug(2, "Item composite ID changed to 0x%s.", st);
+                      metadata_store.item_composite_id_changed = 1;
+                      metadata_store.item_composite_id_is_valid = 1;
                     }
-                    *pt = 0;
-                    debug(2, "Item composite ID changed to 0x%s.", st);
-                    metadata_store.item_composite_id_changed = 1;
-                    metadata_store.item_composite_id_is_valid = 1;
+                  } else {
+                    debug(1, "Unexpected DACP Composite ID length %d.", item_size);
                   }
                   break;
                 case 'astm':
                   t = sp - item_size;
+                  if (item_size < 4)
+                    break;
                   ui = ntohl(*(uint32_t *)(t));
                   debug(2, "DACP Song Time seen: \"%u\" of length %u.", ui, item_size);
                   if (ui != metadata_store.songtime_in_milliseconds) {
@@ -938,6 +973,12 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
 void dacp_monitor_start() {
   int rc;
 
+  pthread_mutex_lock(&dacp_monitor_lifecycle_lock);
+  if (dacp_monitor_initialised != 0) {
+    pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
+    return;
+  }
+
   rc = pthread_cond_init(&dacp_server_information_cv, NULL);
   if (rc)
     debug(1, "Error initialising the DACP Server Information Condition Variable");
@@ -988,24 +1029,36 @@ void dacp_monitor_start() {
 
   memset(&dacp_server, 0, sizeof(dacp_server_record));
 
-  named_pthread_create(&dacp_monitor_thread, NULL, dacp_monitor_thread_code, NULL, "dacp");
-  dacp_monitor_initialised = 1;
+  int thread_create_response =
+      named_pthread_create(&dacp_monitor_thread, NULL, dacp_monitor_thread_code, NULL, "dacp");
+  if (thread_create_response == 0)
+    dacp_monitor_initialised = 1;
+  pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
 }
 
 void dacp_monitor_stop() {
-  if (dacp_monitor_initialised) { // only if it's been started and initialised
-    debug(2, "dacp_monitor_stop");
-    pthread_cancel(dacp_monitor_thread);
-    pthread_join(dacp_monitor_thread, NULL);
-    pthread_mutex_destroy(&dacp_server_information_lock);
-    debug(3, "DACP Conversation Lock Mutex Destroyed");
-    pthread_mutex_destroy(&dacp_conversation_lock);
-    pthread_cond_destroy(&dacp_server_information_cv);
-    debug(3, "DACP Server Information Condition Variable destroyed.");
-    if (dacp_server.active_remote_id) {
-      free(dacp_server.active_remote_id);
-      dacp_server.active_remote_id = NULL;
-    }
+  pthread_t monitor_thread;
+
+  pthread_mutex_lock(&dacp_monitor_lifecycle_lock);
+  if (dacp_monitor_transition_to_stopped(&dacp_monitor_initialised) == 0) {
+    pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
+    return;
+  }
+
+  monitor_thread = dacp_monitor_thread;
+  pthread_mutex_unlock(&dacp_monitor_lifecycle_lock);
+
+  debug(2, "dacp_monitor_stop");
+  pthread_cancel(monitor_thread);
+  pthread_join(monitor_thread, NULL);
+  pthread_mutex_destroy(&dacp_server_information_lock);
+  debug(3, "DACP Conversation Lock Mutex Destroyed");
+  pthread_mutex_destroy(&dacp_conversation_lock);
+  pthread_cond_destroy(&dacp_server_information_cv);
+  debug(3, "DACP Server Information Condition Variable destroyed.");
+  if (dacp_server.active_remote_id) {
+    free(dacp_server.active_remote_id);
+    dacp_server.active_remote_id = NULL;
   }
 }
 
@@ -1033,15 +1086,18 @@ int dacp_get_client_volume(int32_t *result) {
     char *sp = server_reply;
     int32_t item_size;
     if (reply_size >= 8) {
-      if (dacp_tlv_crawl(&sp, &item_size) == 'cmgt') {
+      ssize_t remaining = reply_size;
+      uint32_t type;
+      if ((dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) == 0) && (type == 'cmgt')) {
         sp -= item_size; // drop down into the array -- don't skip over it
-        reply_size -= 8;
-        while (reply_size >= 8) {
-          uint32_t type = dacp_tlv_crawl(&sp, &item_size);
-          reply_size -= item_size + 8;
+        remaining += item_size;
+        while (remaining >= 8) {
+          if (dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) != 0)
+            break;
           if (type == 'cmvo') { // drop down into the dictionary -- don't skip over it
             char *t = sp - item_size;
-            overall_volume = ntohl(*(uint32_t *)(t));
+            if (item_size >= 4)
+              overall_volume = ntohl(*(uint32_t *)(t));
           }
         }
       } else {
@@ -1102,18 +1158,23 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
     char *sp = server_reply;
     int32_t item_size;
     if (le >= 8) {
-      if (dacp_tlv_crawl(&sp, &item_size) == 'casp') {
+      ssize_t remaining = le;
+      uint32_t type;
+      if ((dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) == 0) && (type == 'casp')) {
         //          debug(1,"Speakers:",item_size);
         sp -= item_size; // drop down into the array -- don't skip over it
-        le -= 8;
-        while (le >= 8) {
-          uint32_t type = dacp_tlv_crawl(&sp, &item_size);
+        remaining += item_size;
+        while (remaining >= 8) {
+          if (dacp_tlv_crawl_checked(&sp, &remaining, &type, &item_size) != 0)
+            break;
           if (type == 'mdcl') { // drop down into the dictionary -- don't skip over it
             // debug(1,">>>> Dictionary:");
             sp -= item_size;
-            le -= 8;
+            remaining += item_size;
             speaker_index++;
             if (speaker_index == max_size_of_array) {
+              free(server_reply);
+              server_reply = NULL;
               return 413; // Payload Too Large -- too many speakers
             }
             speaker_info[speaker_index].active = 0;
@@ -1121,7 +1182,6 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
             speaker_info[speaker_index].volume = 0;
             speaker_info[speaker_index].name[0] = '\0';
           } else {
-            le -= item_size + 8;
             char *t;
             // char u;
             int32_t r;
@@ -1136,19 +1196,23 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
               break;
             case 'cmvo':
               t = sp - item_size;
-              r = ntohl(*(uint32_t *)(t));
-              speaker_info[speaker_index].volume = r;
+              if (item_size >= 4) {
+                r = ntohl(*(uint32_t *)(t));
+                speaker_info[speaker_index].volume = r;
+              }
               // debug(1,"The individual volume of speaker \"%s\" is
               // \"%d\".",speaker_info[speaker_index].name,r);
               break;
             case 'msma':
-              t = sp - item_size;
-              s = ntohl(*(uint32_t *)(t));
-              s = s << 32;
-              t += 4;
-              v = (ntohl(*(uint32_t *)(t))) & 0xffffffff;
-              s += v;
-              speaker_info[speaker_index].speaker_number = s;
+              if (item_size >= 8) {
+                t = sp - item_size;
+                s = ntohl(*(uint32_t *)(t));
+                s = s << 32;
+                t += 4;
+                v = (ntohl(*(uint32_t *)(t))) & 0xffffffff;
+                s += v;
+                speaker_info[speaker_index].speaker_number = s;
+              }
               // debug(1,"Speaker machine number: %ld",s);
               break;
 

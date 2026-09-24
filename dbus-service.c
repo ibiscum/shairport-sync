@@ -725,6 +725,24 @@ gboolean notify_volume_callback(ShairportSync *skeleton,
 gboolean notify_disable_standby_mode_callback(ShairportSync *skeleton,
                                               __attribute__((unused)) gpointer user_data) {
   char *th = (char *)shairport_sync_get_disable_standby_mode(skeleton);
+  if (th == NULL) {
+    warn("A null disable_standby_mode was requested via D-Bus interface.");
+    switch (config.disable_standby_mode) {
+    case disable_standby_off:
+      shairport_sync_set_disable_standby_mode(skeleton, "off");
+      break;
+    case disable_standby_always:
+      shairport_sync_set_disable_standby_mode(skeleton, "always");
+      break;
+    case disable_standby_auto:
+      shairport_sync_set_disable_standby_mode(skeleton, "auto");
+      break;
+    default:
+      break;
+    }
+    return TRUE;
+  }
+
   if ((strcasecmp(th, "no") == 0) || (strcasecmp(th, "off") == 0) ||
       (strcasecmp(th, "never") == 0)) {
     config.disable_standby_mode = disable_standby_off;
@@ -757,6 +775,10 @@ gboolean notify_disable_standby_mode_callback(ShairportSync *skeleton,
 gboolean notify_alacdecoder_callback(ShairportSync *skeleton,
                                      __attribute__((unused)) gpointer user_data) {
   char *th = (char *)shairport_sync_get_alacdecoder(skeleton);
+  if (th == NULL) {
+    warn("A null decoder was requested via D-Bus interface.");
+    return TRUE;
+  }
 
 #ifdef CONFIG_AIRPLAY_2
   if (strcasecmp(th, "ffmpeg") != 0) {
@@ -789,6 +811,28 @@ gboolean notify_alacdecoder_callback(ShairportSync *skeleton,
 gboolean notify_interpolation_callback(ShairportSync *skeleton,
                                        __attribute__((unused)) gpointer user_data) {
   char *th = (char *)shairport_sync_get_interpolation(skeleton);
+  if (th == NULL) {
+    warn("A null interpolation method was requested via D-Bus interface.");
+    switch (config.packet_stuffing) {
+    case ST_basic:
+      shairport_sync_set_interpolation(skeleton, "basic");
+      break;
+    case ST_soxr:
+      shairport_sync_set_interpolation(skeleton, "soxr");
+      break;
+    case ST_vernier:
+      shairport_sync_set_interpolation(skeleton, "vernier");
+      break;
+    case ST_auto:
+      shairport_sync_set_interpolation(skeleton, "auto");
+      break;
+    default:
+      shairport_sync_set_interpolation(skeleton, "vernier");
+      break;
+    }
+    return TRUE;
+  }
+
   // #ifdef CONFIG_SOXR
   if (strcasecmp(th, "basic") == 0)
     config.packet_stuffing = ST_basic;
@@ -838,6 +882,25 @@ gboolean notify_interpolation_callback(ShairportSync *skeleton,
 gboolean notify_volume_control_profile_callback(ShairportSync *skeleton,
                                                 __attribute__((unused)) gpointer user_data) {
   char *th = (char *)shairport_sync_get_volume_control_profile(skeleton);
+  if (th == NULL) {
+    warn("A null Volume Control Profile was requested via D-Bus interface.");
+    switch (config.volume_control_profile) {
+    case VCP_standard:
+      shairport_sync_set_volume_control_profile(skeleton, "standard");
+      break;
+    case VCP_flat:
+      shairport_sync_set_volume_control_profile(skeleton, "flat");
+      break;
+    case VCP_dasl_tapered:
+      shairport_sync_set_volume_control_profile(skeleton, "dasl_tapered");
+      break;
+    default:
+      shairport_sync_set_volume_control_profile(skeleton, "standard");
+      break;
+    }
+    return TRUE;
+  }
+
   //  enum volume_control_profile_type previous_volume_control_profile =
   //  config.volume_control_profile;
   if (strcasecmp(th, "standard") == 0)
@@ -891,6 +954,11 @@ gboolean notify_loop_status_callback(ShairportSyncAdvancedRemoteControl *skeleto
 
   // debug(1,"notify_loop_status_callback called");
   char *th = (char *)shairport_sync_advanced_remote_control_get_loop_status(skeleton);
+  if (th == NULL) {
+    warn("A null Loop Request was requested via D-Bus interface.");
+    return TRUE;
+  }
+
   //  enum volume_control_profile_type previous_volume_control_profile =
   //  config.volume_control_profile;
   // debug(1, "notify_loop_status_callback called with loop status of \"%s\".", th);
@@ -946,26 +1014,37 @@ static gboolean on_handle_remote_command(ShairportSync *skeleton, GDBusMethodInv
   debug(1, "RemoteCommand with command \"%s\".", command);
   int reply = 0;
   char *client_reply_hex = "";
+  char *client_reply_hex_heap = NULL;
 #ifdef CONFIG_DACP_CLIENT
   char *client_reply = NULL;
   ssize_t reply_size = 0;
   reply = dacp_send_command((const char *)command, &client_reply, &reply_size);
-  client_reply_hex = alloca(reply_size * 2 + 1);
-  if (client_reply_hex) {
-    char *p = client_reply_hex;
-    if (client_reply) {
+  if ((client_reply != NULL) && (reply_size > 0) && (reply_size <= 1048576)) {
+    size_t reply_size_us = (size_t)reply_size;
+    client_reply_hex_heap = malloc(reply_size_us * 2 + 1);
+    if (client_reply_hex_heap != NULL) {
+      client_reply_hex = client_reply_hex_heap;
+      char *p = client_reply_hex;
       char *q = client_reply;
-      int i;
+      ssize_t i;
       for (i = 0; i < reply_size; i++) {
-        snprintf(p, 3, "%02X", *q);
+        snprintf(p, 3, "%02X", (unsigned char)*q);
         p += 2;
         q++;
       }
+      *p = '\0';
     }
-    *p = '\0';
+  }
+  if (client_reply != NULL) {
+    free(client_reply);
+    client_reply = NULL;
   }
 #endif
   shairport_sync_complete_remote_command(skeleton, invocation, reply, client_reply_hex);
+  if (client_reply_hex_heap != NULL) {
+    free(client_reply_hex_heap);
+    client_reply_hex_heap = NULL;
+  }
   return TRUE;
 }
 
@@ -1300,7 +1379,9 @@ int start_dbus_service() {
 void stop_dbus_service() {
   if (ownerID) {
     debug(2, "stopping dbus service -- unowning ownerID %d.", ownerID);
-    g_bus_unown_name(ownerID);
+    guint id = ownerID;
+    ownerID = 0;
+    g_bus_unown_name(id);
   } else if (service_is_running != 0) {
     debug(1, "Zero OwnerID for running \"org.gnome.ShairportSync\" dbus service.");
   }

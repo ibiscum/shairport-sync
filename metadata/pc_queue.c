@@ -59,12 +59,19 @@ void pc_queue_delete(pc_queue *the_queue) {
     debug(1, "Deleting an unnamed metadata queue.");
   if (the_queue->name != NULL)
     free(the_queue->name);
+  the_queue->name = NULL;
   // debug(2, "destroying pc_queue_item_removed_signal");
   pthread_cond_destroy(&the_queue->pc_queue_item_removed_signal);
   // debug(2, "destroying pc_queue_item_added_signal");
   pthread_cond_destroy(&the_queue->pc_queue_item_added_signal);
   // debug(2, "destroying pc_queue_lock");
   pthread_mutex_destroy(&the_queue->pc_queue_lock);
+  the_queue->items = NULL;
+  the_queue->item_size = 0;
+  the_queue->count = 0;
+  the_queue->capacity = 0;
+  the_queue->toq = 0;
+  the_queue->eoq = 0;
   // debug(2, "destroying signals and locks done");
 }
 
@@ -81,14 +88,16 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
   int rc;
   if (the_queue) {
     if (block == 0) {
-      rc = pthread_mutex_lock(&the_queue->pc_queue_lock);
+      rc = pthread_mutex_trylock(&the_queue->pc_queue_lock);
       if (rc == EBUSY)
-        return EBUSY;
+        return EWOULDBLOCK;
     } else
       rc = pthread_mutex_lock(&the_queue->pc_queue_lock);
-    if (rc)
+    if (rc) {
       debug(1, "Error %d (\"%s\") locking for pc_queue_add_item. Block is %d.", rc, strerror(rc),
             block);
+      return rc;
+    }
     pthread_cleanup_push(pc_queue_cleanup_handler, (void *)the_queue);
     // leave this out if you want this to return if the queue is already full
     // irrespective of the block flag.
@@ -100,7 +109,7 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
                 */
     if (the_queue->count < the_queue->capacity) {
       uint32_t i = the_queue->eoq;
-      void *p = the_queue->items + the_queue->item_size * i;
+      void *p = (char *)the_queue->items + the_queue->item_size * i;
       //    void * p = &the_queue->qbase + the_queue->item_size*the_queue->eoq;
       memcpy(p, the_stuff, the_queue->item_size);
 
@@ -130,6 +139,7 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
     pthread_cleanup_pop(1); // unlock the queue lock.
   } else {
     debug(1, "Adding an item to a NULL queue");
+    response = EINVAL;
   }
   return response;
 }
@@ -138,8 +148,10 @@ int pc_queue_get_item(pc_queue *the_queue, void *the_stuff) {
   int rc;
   if (the_queue) {
     rc = pthread_mutex_lock(&the_queue->pc_queue_lock);
-    if (rc)
+    if (rc) {
       debug(1, "metadata queue \"%s\": error locking for pc_queue_get_item", the_queue->name);
+      return rc;
+    }
     pthread_cleanup_push(pc_queue_cleanup_handler, (void *)the_queue);
     while (the_queue->count == 0) {
       rc = pthread_cond_wait(&the_queue->pc_queue_item_added_signal, &the_queue->pc_queue_lock);
@@ -148,7 +160,7 @@ int pc_queue_get_item(pc_queue *the_queue, void *the_stuff) {
     }
     uint32_t i = the_queue->toq;
     //    void * p = &the_queue->qbase + the_queue->item_size*the_queue->toq;
-    void *p = the_queue->items + the_queue->item_size * i;
+    void *p = (char *)the_queue->items + the_queue->item_size * i;
     memcpy(the_stuff, p, the_queue->item_size);
 
     // update the pointer
@@ -166,6 +178,7 @@ int pc_queue_get_item(pc_queue *the_queue, void *the_stuff) {
     pthread_cleanup_pop(1); // unlock the queue lock.
   } else {
     debug(1, "Removing an item from a NULL queue");
+    return EINVAL;
   }
   return 0;
 }

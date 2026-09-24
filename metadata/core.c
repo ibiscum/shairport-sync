@@ -185,6 +185,9 @@ void metadata_stop(void) {
   if (metadata_running) {
     debug(2, "metadata_stop called.");
 
+  // Mark metadata as stopped before teardown so repeated stop calls are harmless.
+  metadata_running = 0;
+
 #ifdef CONFIG_MQTT
     metadata_mqtt_queue_stop();
 #endif
@@ -248,6 +251,13 @@ int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t 
   } else {
     if (data)
       pack.data = memdup(data, length); // only if it's not a null
+    if ((data != NULL) && (length != 0) && (pack.data == NULL)) {
+      debug(1,
+            "metadata queue \"%s\": failed to duplicate data item: type %x, code %x, "
+            "length %u.",
+            queue->name, pack.type, pack.code, pack.length);
+      return ENOMEM;
+    }
   }
 
   // debug(1, "send_metadata_to_queue %x/%x", type, code);
@@ -278,22 +288,31 @@ int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t 
 int send_metadata(const uint32_t type, const uint32_t code, const char *data, const uint32_t length,
                   rtsp_message *carrier, int block) {
   int rc = 0;
+  int this_rc;
   if (config.metadata_enabled) {
 
 #ifdef CONFIG_METADATA_PIPE
-    rc = send_metadata_to_pipe_queue(type, code, data, length, carrier, block);
+    this_rc = send_metadata_to_pipe_queue(type, code, data, length, carrier, block);
+    if ((rc == 0) && (this_rc != 0))
+      rc = this_rc;
 #endif
 
 #ifdef CONFIG_METADATA_MULTICAST
-    rc = send_metadata_to_multicast_queue(type, code, data, length, carrier, block);
+    this_rc = send_metadata_to_multicast_queue(type, code, data, length, carrier, block);
+    if ((rc == 0) && (this_rc != 0))
+      rc = this_rc;
 #endif
 
 #ifdef CONFIG_METADATA_HUB
-    rc = send_metadata_to_hub_queue(type, code, data, length, carrier, block);
+    this_rc = send_metadata_to_hub_queue(type, code, data, length, carrier, block);
+    if ((rc == 0) && (this_rc != 0))
+      rc = this_rc;
 #endif
 
 #ifdef CONFIG_MQTT
-    rc = send_metadata_to_mqtt_queue(type, code, data, length, carrier, block);
+    this_rc = send_metadata_to_mqtt_queue(type, code, data, length, carrier, block);
+    if ((rc == 0) && (this_rc != 0))
+      rc = this_rc;
 #endif
   }
   return rc;
