@@ -1,10 +1,10 @@
 # Common Utilities Flow
 
 ## Scope
-This note describes the purpose and execution flow of [common.c](common.c), which provides shared infrastructure used across Shairport Sync modules.
+This note describes the purpose and execution flow of [common.c](../common.c), which provides shared infrastructure used across Shairport Sync modules.
 
 ## Purpose
-[common.c](common.c) is the cross-cutting utility layer. It centralizes reusable logic for:
+[common.c](../common.c) is the cross-cutting utility layer. It centralizes reusable logic for:
 
 1. format/rate metadata helpers
 2. socket/port and filesystem utilities
@@ -73,7 +73,7 @@ flowchart TD
 ### 5. Command Hook Execution Path
 - `command_set_volume(...)`, `command_start(...)`, `command_execute(...)`, `command_stop(...)`
 - Flow:
-  1. assemble command line (optionally with extra argument)
+  1. assemble command-line (optionally with extra argument)
   2. fork child process
   3. parse argv with `poptParseArgvString`
   4. `execv` target program in child
@@ -158,24 +158,24 @@ sequenceDiagram
 
 ## Function Index (Function → Caller Modules)
 
-| Function (common.c) | Primary caller modules (examples) | Typical purpose at call site |
+| Function (../common.c) | Primary caller modules (examples) | Typical purpose at call site |
 |---|---|---|
-| [config_lookup_non_empty_string](common.c#L1023) | [shairport.c](shairport.c#L645), [audio_alsa.c](audio_alsa.c#L1231), [audio_pa.c](audio_pa.c#L503), [audio_jack.c](audio_jack.c#L199), [audio_sndio.c](audio_sndio.c#L401) | Read optional non-empty string config values safely |
-| [config_set_lookup_bool](common.c#L1045) | [shairport.c](shairport.c#L654), [shairport.c](shairport.c#L1413) | Normalize yes/no style config settings into booleans |
-| [string_to_service_type](common.c#L1251) | [shairport.c](shairport.c#L646), [shairport.c](shairport.c#L1534) | Convert service type text into internal enum |
-| [bind_UDP_port](common.c#L427) | [rtp.c](rtp.c#L1096), [rtp.c](rtp.c#L1098), [rtp.c](rtp.c#L1100) | Allocate and bind RTP/RTCP/timing UDP sockets |
-| [bind_socket_and_port](common.c#L365) | [common.h](common.h#L587) | Shared helper for explicit bind with resolved bound port |
-| [get_absolute_time_in_ns](common.c#L1664) | [rtp.c](rtp.c#L216), [shairport.c](shairport.c#L239), [audio_alsa.c](audio_alsa.c#L247), [audio_jack.c](audio_jack.c#L363), [dacp.c](dacp.c#L212) | High-resolution monotonic timing for sync, pacing, and diagnostics |
-| [get_monotonic_time_in_ns](common.c#L1607) | [common.h](common.h#L522) | NTP-disciplined monotonic timestamp access |
-| [named_pthread_create](common.c#L2315) | [shairport.c](shairport.c#L3389), [rtp.c](rtp.c#L711), [ap2_buffered_audio_processor.c](ap2_buffered_audio_processor.c#L159), [dacp.c](dacp.c#L991), [tinysvcmdns.c](tinysvcmdns.c#L1753) | Create worker threads with standardized naming |
-| [named_pthread_create_with_priority](common.c#L2334) | [audio_alsa.c](audio_alsa.c#L1507) | Create RT-priority helper thread with fallback |
-| [command_start](common.c#L1331) | [player.c](player.c), [common.h](common.h#L548) | Execute start hook and optionally consume output |
-| [command_stop](common.c#L1441) | [player.c](player.c), [common.h](common.h#L549) | Execute stop hook on session end |
-| [vol2attn](common.c#L1546) | [audio_alsa.c](audio_alsa.c), [audio_pa.c](audio_pa.c), [common.h](common.h#L514) | Map AirPlay volume to backend attenuation range |
-| [get_version_string](common.c#L1874) | [shairport.c](shairport.c#L172), [shairport.c](shairport.c#L2169), [shairport.c](shairport.c#L2747) | Build runtime feature/version descriptor string |
-| [get_device_id](common.c#L2221) | [shairport.c](shairport.c#L2439) | Discover MAC-derived device identity |
-| [parse_ir_filenames](common.c#L2407) | [shairport.c](shairport.c#L1291), [shairport.c](shairport.c#L1295) | Parse convolution IR filename list |
-| [free_ir_filenames](common.c#L2605) | [shairport.c](shairport.c#L2014) | Release parsed convolution filename structures |
+| [config_lookup_non_empty_string](../common.c#L1023) | [shairport.c](../shairport.c#L645), [audio_alsa.c](../audio_alsa.c#L1231), [audio_pa.c](../audio_pa.c#L503), [audio_jack.c](../audio_jack.c#L199), [audio_sndio.c](../audio_sndio.c#L401) | Read optional non-empty string config values safely |
+| [config_set_lookup_bool](../common.c#L1045) | [shairport.c](../shairport.c#L654), [shairport.c](../shairport.c#L1413) | Normalize yes/no style config settings into booleans |
+| [string_to_service_type](../common.c#L1251) | [shairport.c](../shairport.c#L646), [shairport.c](../shairport.c#L1534) | Convert service type text into internal enum |
+| [bind_UDP_port](../common.c#L427) | [rtp.c](../rtp.c#L1096), [rtp.c](../rtp.c#L1098), [rtp.c](../rtp.c#L1100) | Allocate and bind RTP/RTCP/timing UDP sockets |
+| [bind_socket_and_port](../common.c#L365) | [common.h](../common.h#L587) | Shared helper for explicit bind with resolved bound port |
+| [get_absolute_time_in_ns](../common.c#L1664) | [rtp.c](../rtp.c#L216), [shairport.c](../shairport.c#L239), [audio_alsa.c](../audio_alsa.c#L247), [audio_jack.c](../audio_jack.c#L363), [dacp.c](../dacp.c#L212) | High-resolution monotonic timing for sync, pacing, and diagnostics |
+| [get_monotonic_time_in_ns](../common.c#L1607) | [common.h](../common.h#L522) | NTP-disciplined monotonic timestamp access |
+| [named_pthread_create](../common.c#L2315) | [shairport.c](../shairport.c#L3389), [rtp.c](../rtp.c#L711), [ap2_buffered_audio_processor.c](../ap2_buffered_audio_processor.c#L159), [dacp.c](../dacp.c#L991), [tinysvcmdns.c](../tinysvcmdns.c#L1753) | Create worker threads with standardized naming |
+| [named_pthread_create_with_priority](../common.c#L2334) | [audio_alsa.c](../audio_alsa.c#L1507) | Create RT-priority helper thread with fallback |
+| [command_start](../common.c#L1331) | [player.c](../player.c), [common.h](../common.h#L548) | Execute start hook and optionally consume output |
+| [command_stop](../common.c#L1441) | [player.c](../player.c), [common.h](../common.h#L549) | Execute stop hook on session end |
+| [vol2attn](../common.c#L1546) | [audio_alsa.c](../audio_alsa.c), [audio_pa.c](../audio_pa.c), [common.h](../common.h#L514) | Map AirPlay volume to backend attenuation range |
+| [get_version_string](../common.c#L1874) | [shairport.c](../shairport.c#L172), [shairport.c](../shairport.c#L2169), [shairport.c](../shairport.c#L2747) | Build runtime feature/version descriptor string |
+| [get_device_id](../common.c#L2221) | [shairport.c](../shairport.c#L2439) | Discover MAC-derived device identity |
+| [parse_ir_filenames](../common.c#L2407) | [shairport.c](../shairport.c#L1291), [shairport.c](../shairport.c#L1295) | Parse convolution IR filename list |
+| [free_ir_filenames](../common.c#L2605) | [shairport.c](../shairport.c#L2014) | Release parsed convolution filename structures |
 
 ## Why This File Matters
-[common.c](common.c) is a foundational dependency for many subsystems. Changes here propagate widely into startup behavior, command hooks, networking setup, synchronization timing, and robustness of cleanup paths.
+[common.c](../common.c) is a foundational dependency for many subsystems. Changes here propagate widely into startup behavior, command hooks, networking setup, synchronization timing, and robustness of cleanup paths.

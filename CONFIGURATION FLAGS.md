@@ -38,7 +38,7 @@ Here are the audio backend configuration options:
 - `--with-pipewire` Output to the [PipeWire](https://pipewire.org) sound server.
 - `--with-pulseaudio` Include the [PulseAudio](https://www.freedesktop.org/wiki/Software/PulseAudio) sound server.
 - `--with-jack` Output to the [Jack Audio](https://jackaudio.org) system. This is now deprecated.
-- `--with-ao` Output to the [libao](https://xiph.org/ao/) system. No synchronisation.
+- `--with-ao` Output to the [libao](https://xiph.org/ao/) system. No synchronization.
 - `--with-stdout` Include an optional backend module to enable raw audio to be output through standard output (`STDOUT`).
 - `--with-pipe` Include an optional backend module to enable raw audio to be output through a unix pipe.
 
@@ -125,7 +125,7 @@ A [daemon](https://en.wikipedia.org/wiki/Daemon_(computing)) is a computer progr
 FreeBSD and most recent Linux distributions can run an application as a daemon without special modifications. However, in certain older distributions and in special cases it may be necessary to enable Shairport Sync to daemonise itself. Use the `--with-libdaemon` configuration option:
 
 - `--with-libdaemon` Includes a demonising library needed if you want Shairport Sync to demonise itself with the `-d` option. Not needed for `systemd`-based systems which demonise programs differently.
-- `--with-piddir=<pathname>` Specifies a pathname to a directory in which to write the PID file which is created when Shairport Sync daemonises itself and used to locate the daemon process to be killed with the `-k` command line option.
+- `--with-piddir=<pathname>` Specifies a pathname to a directory in which to write the PID file which is created when Shairport Sync daemonises itself and used to locate the daemon process to be killed with the `-k` command-line option.
 
 ### Automatic Start
 | Flags |

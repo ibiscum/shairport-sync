@@ -31,7 +31,7 @@ $ docker run -d --cap-add=SYS_NICE --restart unless-stopped --net host --device 
 
 ### Options
 
-Command line options will be passed to Shairport Sync. Here is an example:
+Command-line options will be passed to Shairport Sync. Here is an example:
 
 ```
 $ docker run -d --cap-add=SYS_NICE --restart unless-stopped --net host --device /dev/snd \
@@ -42,9 +42,9 @@ This will send audio to alsa hardware device `hw:0` and make use of the that dev
 
 The image is built with PipeWire and PulseAudio backend support. To use it, refer to [`docker-compose.yaml`](docker-compose.yaml) for required environment variables and mounts.
 
-To use the PipeWire backend, set the backend to `pipewire` via either command line option `-o pipewire ` or the `output_backend` field in the `general` section of the configuration file.
+To use the PipeWire backend, set the backend to `pipewire` via either command-line option `-o pipewire ` or the `output_backend` field in the `general` section of the configuration file.
 
-Similarly, to use the PulseAudio backend, set the backend to `pulseaudio` via either command line option `-o pulseaudio ` or the `output_backend` field in the `general` section of the configuration file.
+Similarly, to use the PulseAudio backend, set the backend to `pulseaudio` via either command-line option `-o pulseaudio ` or the `output_backend` field in the `general` section of the configuration file.
 For use with PulseAudio, you might need to adjust authentication on your PulseAudio server ([PA documentation](https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/Modules/#module-native-protocol-unixtcp)).
 
 ## Configuration File

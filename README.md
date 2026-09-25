@@ -13,12 +13,12 @@ Shairport Sync does not support AirPlay video or photo streaming.
 * If you are updating from a previous version of Shairport Sync, please visit the [release notes](RELEASENOTES.md) for possible breaking changes.
 * A building guide is available [here](BUILD.md).
 * A Docker image is available on the [Docker Hub](https://hub.docker.com/r/mikebrady/shairport-sync). Also see [docker/README.md](docker/README.md).
-* Next Steps and Advanced Topics are [here](ADVANCED%20TOPICS/README.md).
+* Next Steps and Advanced Topics are [here](documents/Advanced Topics/README.md).
 * Architecture and implementation flow documents index is [here](documents/README.md).
 * Runtime settings are documented [here](scripts/shairport-sync.conf).
-* Build configuration options are detailed in [CONFIGURATION FLAGS.md](CONFIGURATION%20FLAGS.md).
-* The `man` page, detailing command line options, is [here](https://raw.githack.com/mikebrady/shairport-sync/master/man/shairport-sync.1.xml).
-* Some advanced topics and developed in [ADVANCED TOPICS](https://github.com/mikebrady/shairport-sync/tree/master/ADVANCED%20TOPICS).
+* Build configuration options are detailed in [CONFIGURATION FLAGS.md](CONFIGURATION FLAGS.md).
+* The `man` page, detailing command-line options, is [here](https://raw.githack.com/mikebrady/shairport-sync/master/man/shairport-sync.1.xml).
+* Some advanced topics are developed in [ADVANCED TOPICS](https://github.com/mikebrady/shairport-sync/tree/master/ADVANCED%20TOPICS).
 
 # Features
 * Outputs AirPlay audio to [ALSA](https://www.alsa-project.org/wiki/Main_Page), [sndio](http://www.sndio.org), [PipeWire](https://pipewire.org), [PulseAudio](https://www.freedesktop.org/wiki/Software/PulseAudio/), to a unix pipe or to `STDOUT`. It also has limited support for [libao](https://xiph.org/ao/).
@@ -31,14 +31,14 @@ Shairport Sync does not support AirPlay video or photo streaming.
 * Flexible output rates, formats and channels with built-in transcoding.
 * Remote control commands -- such as `play`, `pause`, and volume-setting commands -- can be sent to Classic AirPlay clients via the D-Bus, MPRIS and MQTT interfaces. Switch to the `development` branch to get experimental support for remote control with AirPlay 2 clients.
 
-Some features require configuration at build time – see [CONFIGURATION FLAGS.md](CONFIGURATION%20FLAGS.md).
+Some features require configuration at build time – see [CONFIGURATION FLAGS.md](CONFIGURATION FLAGS.md).
 
 # Status
-Shairport Sync was designed to [run best](ADVANCED%20TOPICS/GetTheBest.md) on stable, dedicated, stand-alone low-power "headless" systems with ALSA as the audio system and with a decent CD-quality Digital to Analog Converter (DAC).
+Shairport Sync was designed to [run best](documents/Advanced Topics/GetTheBest.md) on stable, dedicated, stand-alone low-power "headless" systems with ALSA as the audio system and with a decent CD-quality Digital to Analog Converter (DAC).
 
 Shairport Sync runs on recent (2018 onwards) Linux systems, FreeBSD from 12.1 onwards and OpenBSD. It requires a system with the power of a Raspberry Pi B or better.
 
-Classic Shairport Sync runs on a wider variety of Linux sytems, including OpenWrt and Cygwin and it also runs on OpenBSD. Many embedded devices are powerful enough to power classic Shairport Sync.
+Classic Shairport Sync runs on a wider variety of Linux systems, including OpenWrt and Cygwin and it also runs on OpenBSD. Many embedded devices are powerful enough to power classic Shairport Sync.
 
 # Heritage and Acknowledgements
 The functionality offered by Shairport Sync is the result of study and analysis of the AirPlay and AirPlay 2 protocols by many people over the years. These protocols have not been officially published, and there is no assurance that Shairport Sync will continue to work in future.
@@ -52,28 +52,28 @@ For the development of AirPlay 2 support in Version 4.x, special thanks are due 
 * [invano](https://github.com/invano) for showing what might be possible and for initial Python development.
 * [Charles Omer](https://github.com/charlesomer) for Docker automation, repository management automation, testing, encouragement, enthusiasm.
 
-Much of Shairport Sync's AirPlay 2 functionality is based on ideas developed at the [openairplay airplay2-receiver]( https://github.com/openairplay/airplay2-receiver) repository. It is a pleasure to acknowledge the work of the contributors there.
+Much of Shairport Sync's AirPlay 2 functionality is based on ideas developed at the [openairplay airplay2-receiver](https://github.com/openairplay/airplay2-receiver) repository. It is a pleasure to acknowledge the work of the contributors there.
 
 Thanks to everyone who has supported and improved Shairport Sync over the years.
 
 # More about Shairport Sync
-The audio that Shairport Sync receives is sent to the computer's sound system, to a named unix pipe or to `STDOUT`. By far the best sound system to use is ALSA. This is because ALSA can give direct access to the Digital to Analog Converter (DAC) hardware of the machine. Audio samples can be sent through ALSA directly to the DAC, maximising fidelity, and accurate timing information can be obtained from the DAC, maximising synchronisation.
+The audio that Shairport Sync receives is sent to the computer's sound system, to a named unix pipe or to `STDOUT`. By far the best sound system to use is ALSA. This is because ALSA can give direct access to the Digital to Analog Converter (DAC) hardware of the machine. Audio samples can be sent through ALSA directly to the DAC, maximising fidelity, and accurate timing information can be obtained from the DAC, maximising synchronization.
 
 ## Synchronised Audio
-Shairport Sync offers *full audio synchronisation*. Full audio synchronisation means that audio is played on the output device at exactly the time specified by the audio source. To accomplish this, Shairport Sync needs access to audio systems – such as ALSA on Linux and `sndio` on FreeBSD and OpenBSD – that provide very accurate timing information about audio being streamed to output devices. Ideally, Shairport Sync should have direct access to the output device used, which should be a real sound card capable of working with 44,100 or 48,000 samples ("frames") per second, interleaved PCM stereo of 8, 16, 24 or 32 bits. Shairport Sync will choose a suitable output rate, format and channel count. This can be done manually or automatically.
+Shairport Sync offers *full audio synchronization*. Full audio synchronization means that audio is played on the output device at exactly the time specified by the audio source. To accomplish this, Shairport Sync needs access to audio systems – such as ALSA on Linux and `sndio` on FreeBSD and OpenBSD – that provide very accurate timing information about audio being streamed to output devices. Ideally, Shairport Sync should have direct access to the output device used, which should be a real sound card capable of working with 44,100 or 48,000 samples ("frames") per second, interleaved PCM stereo of 8, 16, 24 or 32 bits. Shairport Sync will choose a suitable output rate, format and channel count. This can be done manually or automatically.
 
 Shairport Sync works well with sound servers such as PipeWire and PulseAudio, widely used sound servers found on many desktop Linuxes. While the timing information is not as accurate as that of ALSA or `sndio`, it is often impractical to bypass these systems. 
 
-For other use cases, Shairport Sync can provide synchronised audio output to a unix pipe or to `STDOUT`, or to audio systems that do not provide timing information. This could perhaps be described as *partial audio synchronisation*, where synchronised audio is provided by Shairport Sync, but what happens to it in the subsequent processing chain, before it reaches the listener's ear, is outside the control of Shairport Sync.
+For other use cases, Shairport Sync can provide synchronised audio output to a unix pipe or to `STDOUT`, or to audio systems that do not provide timing information. This could perhaps be described as *partial audio synchronization*, where synchronised audio is provided by Shairport Sync, but what happens to it in the subsequent processing chain, before it reaches the listener's ear, is outside the control of Shairport Sync.
 
 ## Latency, "Stuffing", Timing
 AirPlay protocols use an agreed *latency* – a time lag or delay – between the time represented by a sound sample's `timestamp` and the time it is actually played by the audio output device, typically a Digital to Audio Converter (DAC). Latency gives players time to compensate for network delays, processing time variations and so on. The latency is specified by the audio source when it negotiates with Shairport Sync. AirPlay sources set a latency of around 2.0 to 2.25 seconds. AirPlay 2 can use shorter latencies, around half a second.
 
-As mentioned previously, Shairport Sync implements full audio synchronisation when used with ALSA, `sndio`, PipeWire or PulseAudio audio systems. This is done by monitoring the timestamps present in data coming from the audio source and the timing information coming back from the audio system itself. To maintain the  latency required for exact synchronisation, Shairport Sync will perform interpolation -- effectively shortening or lengthening the stream of audio to exactly match the output rate to the input rate. If the output device is running too slow or too fast relative to the source, Shairport Sync will resample sequences of audio frames to add or remove frames as needed. Higher quality resampling can be achieved with `libsoxr` support, but this requires a good deal of processing power — most embedded devices probably can't support it. If your computer is fast enough, Shairport Sync will automatically choose this method.
+As mentioned previously, Shairport Sync implements full audio synchronization when used with ALSA, `sndio`, PipeWire or PulseAudio audio systems. This is done by monitoring the timestamps present in data coming from the audio source and the timing information coming back from the audio system itself. To maintain the  latency required for exact synchronization, Shairport Sync will perform interpolation -- effectively shortening or lengthening the stream of audio to exactly match the output rate to the input rate. If the output device is running too slow or too fast relative to the source, Shairport Sync will resample sequences of audio frames to add or remove frames as needed. Higher quality resampling can be achieved with `libsoxr` support, but this requires a good deal of processing power — most embedded devices probably can't support it. If your computer is fast enough, Shairport Sync will automatically choose this method.
 
-Interpolation is not done for partial audio synchronisation – the audio samples are simply presented at exactly the right time to the next stage in the processing chain.
+Interpolation is not done for partial audio synchronization – the audio samples are simply presented at exactly the right time to the next stage in the processing chain.
 
-Timestamps are referenced relative to the source computer's clock – the "source clock", but timing must be done relative to the clock of the computer running Shairport Sync – the "local clock". So, Shairport Sync synchronises the source clock and the local clock, usually to within a fraction of a millisecond. In AirPlay 2, this is done with the assistance of a companion application called [NQPTP](https://github.com/mikebrady/nqptp) using a [PTP](https://en.wikipedia.org/wiki/Precision_Time_Protocol)-based timing protocol. In classic AirPlay, a variant of [NTP](https://en.wikipedia.org/wiki/Network_Time_Protocol) synchronisation protocols is used.
+Timestamps are referenced relative to the source computer's clock – the "source clock", but timing must be done relative to the clock of the computer running Shairport Sync – the "local clock". So, Shairport Sync synchronises the source clock and the local clock, usually to within a fraction of a millisecond. In AirPlay 2, this is done with the assistance of a companion application called [NQPTP](https://github.com/mikebrady/nqptp) using a [PTP](https://en.wikipedia.org/wiki/Precision_Time_Protocol)-based timing protocol. In classic AirPlay, a variant of [NTP](https://en.wikipedia.org/wiki/Network_Time_Protocol) synchronization protocols is used.
 
 ## Example configurations
 

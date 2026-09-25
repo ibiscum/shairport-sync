@@ -84,7 +84,7 @@ Invalid direct transitions (must not happen):
 
 1. [init](../audio_alsa.c#L1167)
 - Sets backend defaults (mmap policy, stall limits, standby behavior).
-- Reads configuration options and CLI overrides.
+- Reads configuration options and command-line overrides.
 - Starts [alsa_buffer_monitor_thread_code](../audio_alsa.c#L2256).
 
 2. [prepare](../audio_alsa.c#L1645)

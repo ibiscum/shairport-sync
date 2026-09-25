@@ -1,6 +1,6 @@
 Shairport Sync on OpenBSD [AirPlay 2 Not Supported]
 ----
-This is a note about installing Shairport Sync on OpenBSD. Shairport Sync compiles and runs natively on OpenBSD using the `sndio` back end. For general information on `sndio` please follow [this link](http://www.sndio.org).
+This is a note about installing Shairport Sync on OpenBSD. Shairport Sync compiles and runs natively on OpenBSD using the `sndio` backend. For general information on `sndio` please follow [this link](http://www.sndio.org).
 
 Unlike FreeBSD, it seems that OpenBSD does not use the directory `/usr/local/etc` as a system configuration directory ("`sysconfdir`") but follows the same practice as Linux in using `/etc` as the default `sysconfdir`.
 
@@ -68,5 +68,5 @@ There is no make install yet -- you're on your own.
 
 Using the `sndio` backend
 ----
-The `sndio` back end does not yet have a hardware volume control facility.
+The `sndio` backend does not yet have a hardware volume control facility.
 You should set the volume to maximum before use, using, for example, the `mixerctl` command.

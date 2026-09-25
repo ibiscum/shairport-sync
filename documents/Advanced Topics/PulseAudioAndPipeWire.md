@@ -11,7 +11,7 @@ To use PipeWire or PulseAudio-based systems, Shairport Sync must be set up as a 
 1. Shairport Sync will work without modification in a PipeWire- or PulseAudio-based system if built with the default ALSA backend. This is because PipeWire and PulseAudio both provide a default ALSA pseudo-device to receive and play audio from ALSA-compatible programs.
 2. Shairport Sync can be built with "native" PipeWire or PulseAudio backends by adding the `--with-pipewire` or `--with-pulseaudio` configuration flags when it is being built. This has the advantage of bypassing the ALSA compatability layer.
 3. To check if PipeWire support is built into Shairport Sync, check that the string `PipeWire` is included in the version string. (Enter `$ shairport-sync -V` to get the version string.)  Similarly, the version string will include `PulseAudio` if the PulseAudio backend is built in.
-4. Remember to specify which backend Shairport Sync should use in the configuration file or on the command line.
+4. Remember to specify which backend Shairport Sync should use in the configuration file or on the command-line.
 
 ## Starting Shairport Sync as a User Service
 Please refer to [this](https://github.com/mikebrady/shairport-sync/blob/development/BUILD.md#5-enable-and-start-service) section to discover how to start Shairport Sync as a user service.

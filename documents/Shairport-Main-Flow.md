@@ -1,10 +1,12 @@
 # Shairport Main Program Flow
 
 ## Scope
-This note describes the purpose and execution flow of [shairport.c](shairport.c), the process entrypoint and orchestration layer for Shairport Sync.
+This note describes the purpose and execution flow of [shairport.c](../shairport.c), the process entrypoint and orchestration layer for Shairport Sync.
+
+For internal HTTP response parsing details used by request/response helpers, see [TinyHTTP-Parser-Flow.md](TinyHTTP-Parser-Flow.md).
 
 ## Purpose
-[shairport.c](shairport.c) is the top-level coordinator for the daemon/process. It does not perform audio decoding or RTSP packet handling directly. Instead, it:
+[shairport.c](../shairport.c) is the top-level coordinator for the daemon/process. It does not perform audio decoding or RTSP packet handling directly. Instead, it:
 
 - establishes process-wide defaults
 - parses and merges command-line and configuration file settings
@@ -118,7 +120,7 @@ Invalid direct transitions (must not happen):
 ## Key Functions and Their Roles
 
 - `main(...)`: full startup orchestration and permanent run loop.
-- `parse_options(...)`: reads defaults, config file, then CLI overrides.
+- `parse_options(...)`: reads defaults, config file, then command-line overrides.
 - `usage(...)`: prints runtime usage and backend lists.
 - `print_version(...)`: prints version string and exits.
 - `exit_rtsp_listener()`: listener thread shutdown helper.
@@ -135,11 +137,11 @@ Invalid direct transitions (must not happen):
 2. configuration file values
 3. command-line options (highest priority)
 
-This ensures reproducible startup while preserving expected CLI override semantics.
+This ensures reproducible startup while preserving expected command-line override semantics.
 
 ## Threading and Subsystem Topology
 
-At runtime, [shairport.c](shairport.c) supervises threads rather than processing streams itself:
+At runtime, [shairport.c](../shairport.c) supervises threads rather than processing streams itself:
 
 - RTSP listener thread: created from `rtsp_listen_loop`
 - activity monitor thread: started via `activity_monitor_start`
@@ -148,7 +150,7 @@ At runtime, [shairport.c](shairport.c) supervises threads rather than processing
 
 ## Shutdown Sequence Summary
 
-On controlled exit, [shairport.c](shairport.c) attempts shutdown in dependency-safe order:
+On controlled exit, [shairport.c](../shairport.c) attempts shutdown in dependency-safe order:
 
 1. stop activity monitor
 2. stop DACP and optional control services
@@ -162,4 +164,4 @@ This minimizes dangling threads and partially torn-down services.
 
 ## Why This File Matters
 
-[shairport.c](shairport.c) is the integration boundary for nearly every major subsystem. Changes here affect startup behavior, service-mode compatibility, process lifecycle correctness, and operational safety during shutdown.
+[shairport.c](../shairport.c) is the integration boundary for nearly every major subsystem. Changes here affect startup behavior, service-mode compatibility, process lifecycle correctness, and operational safety during shutdown.

@@ -60,7 +60,7 @@ Capability probe path:
 1. Calls ao_initialize and picks default driver with ao_default_driver_id.
 2. Sets backend timing defaults in global config.
 3. Loads audio option sets from config via parse_audio_options.
-4. Parses CLI options:
+4. Parses command-line options:
 - -d selects libao driver by short name.
 - -i appends id option.
 - -n appends both dev and dsp names.

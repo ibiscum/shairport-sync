@@ -16,7 +16,7 @@ Once Shairport Sync has been built with the D-Bus interface, it must then be ins
 To become available as a system-wide service on the D-Bus `system` bus, it must be installed as a system service using the `# make install` step of the build process. This installs the appropriate service files and sets required permissions.
 Remember to enable Shairport Sync to start as a system service. You may also need to restart the entire system to allow the service to be seen.
 
-If Shairport Sync is installed as a user service, it will not be able to become a service on the D-Bus `system` bus, but it can be added to the D-Bus `session` bus. Edit the configuration file to select the `session` bus, or add the option `--dbus_default_message_bus=session` to the command line.
+If Shairport Sync is installed as a user service, it will not be able to become a service on the D-Bus `system` bus, but it can be added to the D-Bus `session` bus. Edit the configuration file to select the `session` bus, or add the option `--dbus_default_message_bus=session` to the command-line.
 
 ### D-Feet
 On desktop Linuxes with a GUI, e.g. Ubuntu, D-Feet is a great tool for examining a D-Bus service:
@@ -25,13 +25,13 @@ On desktop Linuxes with a GUI, e.g. Ubuntu, D-Feet is a great tool for examining
 
 ### Sample Test Client
 
-A simple test client, written in C, can be built when you are building Shairport Sync itself. To build it, simply add the `--with-dbus-test-client` flag at the `./configure…` stage. Along with the `shairport-sync` executable application, you'll get another executable called `shairport-sync-dbus-test-client` which you can run from the command line.
+A simple test client, written in C, can be built when you are building Shairport Sync itself. To build it, simply add the `--with-dbus-test-client` flag at the `./configure…` stage. Along with the `shairport-sync` executable application, you'll get another executable called `shairport-sync-dbus-test-client` which you can run from the command-line.
 
 After attempting to send some commands, it will listen for property changes on the D-Bus interface and report them on the console.
 
 ### Command Line Examples
 
-The examples below are based on Shairport Sync running as a `system` service and use the standard CLI tool `dbus-send`:
+The examples below are based on Shairport Sync running as a `system` service and use the standard command-line tool `dbus-send`:
 * Get `Active` Status -- `true` when Shairport Sync is playing (and for a short time later); `false` otherwise.
 ```
    $ dbus-send --print-reply --system --dest=org.gnome.ShairportSync /org/gnome/ShairportSync org.freedesktop.DBus.Properties.Get string:org.gnome.ShairportSync string:Active
@@ -147,7 +147,7 @@ The examples below are based on Shairport Sync running as a `system` service and
 #### Remote Control
 Remote Control commands are sent as requests to the player (iOS, iTunes, macOS Music, etc.). Different versions of the players implement different subsets of the following commands.
 
-**Note:** Remote Control only works on Classic Airplay
+**Note:** Remote Control only works on Classic AirPlay
 
 * Check if Remote Control is available:
 ```
@@ -159,14 +159,14 @@ Remote Control commands are sent as requests to the player (iOS, iTunes, macOS M
 ```
   Remote Control commands include: `Play`, `Pause`, `PlayPause`, `Resume`, `Stop`, `Next`, `Previous`, `VolumeUp`, `VolumeDown`, `ToggleMute`, `FastForward`, `Rewind`, `ShuffleSongs`.
 
-* Set Airplay Volume using Remote Control. Airplay Volume is between -30.0 and 0.0 and maps linearly onto the slider, with -30.0 being lowest and 0.0 being highest.
+* Set AirPlay Volume using Remote Control. AirPlay Volume is between -30.0 and 0.0 and maps linearly onto the slider, with -30.0 being lowest and 0.0 being highest.
 ```
   $ dbus-send --system --print-reply --type=method_call --dest=org.gnome.ShairportSync '/org/gnome/ShairportSync' org.gnome.ShairportSync.RemoteControl.SetAirplayVolume double:-10.0
 ```
 #### Advanced Remote Control
 Some commands and properties are accessible only through the `AdvancedRemoteControl` interface.
 
-**Note:** Advanced Remote Control only works on Classic Airplay and has only been observed to work with the macOS Music app.
+**Note:** Advanced Remote Control only works on Classic AirPlay and has only been observed to work with the macOS Music app.
 
 * Check if Advanced Remote Control is available:
 ```
