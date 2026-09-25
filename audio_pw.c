@@ -527,7 +527,7 @@ static int play(__attribute__((unused)) void *buf, int samples,
   // copy the samples into the queue
   // debug(3, "play %u samples; %u samples already in the buffer.", samples, audio_occupancy /
   // (data.bytes_per_sample * data.channels));
-  size_t bytes_to_transfer = samples * data.channels * data.bytes_per_sample;
+  size_t bytes_to_transfer = (size_t)samples * data.channels * data.bytes_per_sample;
   pthread_mutex_lock(&buffer_mutex);
   size_t bytes_available = audio_size - audio_occupancy;
   if (bytes_available < bytes_to_transfer)
