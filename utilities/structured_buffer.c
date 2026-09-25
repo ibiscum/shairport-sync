@@ -30,11 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
-  char *buf;
-  size_t buf_size;
-  size_t buf_pos;
-} structured_buffer;
+#include "structured_buffer.h"
 
 structured_buffer *sbuf_new(size_t size) {
   structured_buffer *sbuf = (structured_buffer *)malloc(sizeof(structured_buffer));
@@ -47,6 +43,7 @@ structured_buffer *sbuf_new(size_t size) {
     } else {
       sbuf->buf_size = size;
       sbuf->buf = buf;
+      sbuf->buf[0] = '\0';
     }
   }
   return sbuf;
@@ -56,6 +53,7 @@ int sbuf_clear(structured_buffer *sbuf) {
   int response = -1;
   if ((sbuf != NULL) && (sbuf->buf != NULL)) {
     sbuf->buf_pos = 0;
+    sbuf->buf[0] = '\0';
     response = 0;
   }
   return response;
@@ -77,13 +75,18 @@ void sbuf_cleanup(void *arg) {
 
 int sbuf_printf(structured_buffer *sbuf, const char *format, ...) {
   int response = -1;
-  if ((sbuf != NULL) && (sbuf->buf != NULL)) {
+  if ((sbuf != NULL) && (sbuf->buf != NULL) && (format != NULL)) {
+    if (sbuf->buf_pos > sbuf->buf_size)
+      return -1;
+
     char *p = sbuf->buf + sbuf->buf_pos;
+    size_t available = (sbuf->buf_size - sbuf->buf_pos) + 1;
     va_list args;
     va_start(args, format);
-    vsnprintf(p, sbuf->buf_size - sbuf->buf_pos, format, args);
-    sbuf->buf_pos = sbuf->buf_pos + strlen(p);
-    response = strlen(p);
+    int needed = vsnprintf(p, available, format, args);
+    size_t written = strnlen(p, available);
+    sbuf->buf_pos = sbuf->buf_pos + written;
+    response = (needed < 0) ? -1 : (int)written;
     va_end(args);
   }
   return response;
@@ -92,12 +95,17 @@ int sbuf_printf(structured_buffer *sbuf, const char *format, ...) {
 int sbuf_append(structured_buffer *sbuf, char *plistString, uint32_t plistStringLength) {
   int response = -1;
   if ((sbuf != NULL) && (sbuf->buf != NULL) && (plistString != NULL)) {
+    if (sbuf->buf_pos > sbuf->buf_size)
+      return -1;
+
     if (plistStringLength == 0) {
+      sbuf->buf[sbuf->buf_pos] = '\0';
       response = 0;
     } else {
-      if (plistStringLength < (sbuf->buf_size - sbuf->buf_pos)) {
+      if (plistStringLength <= (sbuf->buf_size - sbuf->buf_pos)) {
         memcpy(sbuf->buf + sbuf->buf_pos, plistString, plistStringLength);
         sbuf->buf_pos = sbuf->buf_pos + plistStringLength;
+        sbuf->buf[sbuf->buf_pos] = '\0';
         response = 0;
       } else {
         debug(1, "plist too large -- omitted");
@@ -109,7 +117,7 @@ int sbuf_append(structured_buffer *sbuf, char *plistString, uint32_t plistString
 
 int sbuf_buf_and_length(structured_buffer *sbuf, char **b, size_t *l) {
   int response = 0;
-  if ((sbuf != NULL) && (sbuf->buf != NULL)) {
+  if ((sbuf != NULL) && (sbuf->buf != NULL) && (b != NULL) && (l != NULL)) {
     *b = sbuf->buf;
     *l = sbuf->buf_pos;
   } else {

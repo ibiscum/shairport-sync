@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stddef.h>
 
 static uint64_t saturating_add_u64(uint64_t a, uint64_t b) {
   if (UINT64_MAX - a < b)

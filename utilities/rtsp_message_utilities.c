@@ -53,12 +53,12 @@ void msg_retain(rtsp_message *msg) {
     debug(4, "msg_free increment reference counter message %d to %d.", msg->index_number,
           msg->referenceCount);
     // debug(1,"msg_retain -- item %d reference count %d.", msg->index_number, msg->referenceCount);
-    rc = pthread_mutex_unlock(&reference_counter_lock);
-    if (rc)
-      debug(1, "Error %d unlocking reference counter lock", rc);
   } else {
     debug(1, "invalid rtsp_message pointer 0x%" PRIxPTR " passed to retain", (uintptr_t)msg);
   }
+  rc = pthread_mutex_unlock(&reference_counter_lock);
+  if (rc)
+    debug(1, "Error %d unlocking reference counter lock", rc);
 }
 
 rtsp_message *msg_init(void) {
@@ -86,13 +86,28 @@ rtsp_message *msg_init(void) {
 }
 
 int msg_add_header(rtsp_message *msg, char *name, char *value) {
+  if ((msg == NULL) || (name == NULL) || (value == NULL)) {
+    warn("invalid message header data");
+    return 1;
+  }
+
   if (msg->nheaders >= sizeof(msg->name) / sizeof(char *)) {
     warn("too many headers?!");
     return 1;
   }
 
-  msg->name[msg->nheaders] = strdup(name);
-  msg->value[msg->nheaders] = strdup(value);
+  char *name_copy = strdup(name);
+  if (name_copy == NULL)
+    return 1;
+
+  char *value_copy = strdup(value);
+  if (value_copy == NULL) {
+    free(name_copy);
+    return 1;
+  }
+
+  msg->name[msg->nheaders] = name_copy;
+  msg->value[msg->nheaders] = value_copy;
   msg->nheaders++;
 
   return 0;
@@ -205,7 +220,8 @@ int msg_handle_line(rtsp_message **pmsg, char *line) {
     }
     *p = 0;
     p += 2;
-    msg_add_header(msg, line, p);
+    if (msg_add_header(msg, line, p) != 0)
+      goto fail;
     debug(4, "    %s: %s.", line, p);
     return -1;
   } else {
@@ -227,8 +243,9 @@ fail:
 
 int rtsp_message_contains_plist(rtsp_message *message) {
   int reply = 0; // assume there is no plist in the message
-  if ((message->contentlength >= strlen("bplist00")) &&
-      (strstr(message->content, "bplist00") == message->content))
+  if ((message != NULL) && (message->content != NULL) &&
+      (message->contentlength >= strlen("bplist00")) &&
+      (memcmp(message->content, "bplist00", strlen("bplist00")) == 0))
     reply = 1;
   return reply;
 }
@@ -243,10 +260,19 @@ plist_t plist_from_rtsp_content(rtsp_message *message) {
 
 char *plist_as_xml_text(plist_t the_plist) {
   // caller must free the returned character buffer
+  if (the_plist == NULL)
+    return NULL;
+
   // convert it to xml format
-  uint32_t size;
+  uint32_t size = 0;
   char *plist_out = NULL;
   plist_to_xml(the_plist, &plist_out, &size);
+
+  if ((plist_out == NULL) || (size == 0)) {
+    if (plist_out)
+      free(plist_out);
+    return NULL;
+  }
 
   // put it into a NUL-terminated string
   char *reply = malloc(size + 1);
@@ -263,8 +289,13 @@ char *plist_as_xml_text(plist_t the_plist) {
 char *rtsp_plist_content(rtsp_message *message) {
   char *reply = NULL;
   // first, check if it has binary plist content
-  if (rtsp_message_contains_plist(message))
-    reply = plist_as_xml_text(plist_from_rtsp_content(message));
+  if (rtsp_message_contains_plist(message)) {
+    plist_t p = plist_from_rtsp_content(message);
+    if (p) {
+      reply = plist_as_xml_text(p);
+      plist_free(p);
+    }
+  }
   return reply;
 }
 

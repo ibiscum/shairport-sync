@@ -25,15 +25,21 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #define ALSA_PCM_NEW_HW_PARAMS_API
 
 #include <alsa/asoundlib.h>
+#include <alloca.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <math.h>
 #include <memory.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <strings.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -214,7 +220,8 @@ void handle_unfixable_error(int errorCode) {
     if (config.cmd_unfixable) {
       command_execute(config.cmd_unfixable, messageString, 1);
     } else {
-      pthread_mutex_unlock(&alsa_mutex); // release the alsa mutex to allow a clean exit
+      // Avoid attempting to unlock an unknown mutex ownership state here.
+      // We are on a fatal path and will terminate immediately.
       die("an unrecoverable error, \"output_device_error_%d\", has been "
           "detected. Doing an emergency exit, as no \"run_this_if_an_unfixable_error_is_detected\" "
           "handler has been provided.",
@@ -277,9 +284,14 @@ static int get_permissible_configuration_settings() {
           }
         }
 
+        const char *device_type_name = "SND_PCM_TYPE_UNKNOWN";
+        size_t device_types_count = sizeof(device_types) / sizeof(device_types[0]);
+        if (((int)device_type >= 0) && ((size_t)device_type < device_types_count))
+          device_type_name = device_types[device_type];
+
         debug(
             2, "device: \"%s\", name: \"%s\", type: \"%s\", id: \"%s\", CARD=%d,DEV=%u,SUBDEV=%u.",
-            alsa_out_dev, snd_pcm_info_get_name(local_alsa_info), device_types[device_type],
+            alsa_out_dev, snd_pcm_info_get_name(local_alsa_info), device_type_name,
             snd_pcm_info_get_id(local_alsa_info), snd_pcm_info_get_card(local_alsa_info),
             snd_pcm_info_get_device(local_alsa_info), snd_pcm_info_get_subdevice(local_alsa_info));
 

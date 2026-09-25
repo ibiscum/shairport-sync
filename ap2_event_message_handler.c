@@ -46,20 +46,20 @@ ssize_t ap2_event_port_send_message(rtsp_conn_info *conn, char *data, size_t dat
   ssize_t result = -1; // assume a problem
   pthread_mutex_lock(&conn->event_sender_mutex);
   pthread_cleanup_push(mutex_unlock, &conn->event_sender_mutex);
-  if (conn->event_channel_fd != 0) {
+  if (conn->event_channel_fd > 0) {
     result = write_encrypted(conn->event_channel_fd, &conn->ap2_pairing_context.event_cipher_bundle,
                              data, data_length);
     if ((result != -1) && ((size_t)result == data_length)) {
       debug(3, "Connection %d: Packet of %zu bytes successfully written on the Event Port.",
             conn->connection_number, result);
-      uint8_t packet[4096];
+      uint8_t packet[4097];
       result =
           read_encrypted(conn->event_channel_fd, &conn->ap2_pairing_context.event_cipher_bundle,
-                         packet, sizeof(packet));
+                         packet, sizeof(packet) - 1);
       debug(3, "Connection %d: Packet of %zu bytes successfully read on the Event Port.",
             conn->connection_number, result);
       if (result > 0) {
-        packet[result] = '\0';
+        packet[(size_t)result] = '\0';
         debug(3, "Connection %d: Packet Received on Event Port with contents: \n--\n%s\n--\n",
               conn->connection_number, packet);
       } else {
@@ -88,17 +88,30 @@ ssize_t ap2_event_port_post_command(rtsp_conn_info *conn, plist_t command) {
 
     plist_to_bin(command, &plistString, &plistStringLength);
     if (plistString != NULL) {
-      sbuf_printf(sbuf, "POST /command RTSP/1.0\r\nContent-Length: %u\r\n", plistStringLength);
-      sbuf_printf(sbuf, "Content-Type: application/x-apple-binary-plist\r\n\r\n");
-      sbuf_append(sbuf, plistString, plistStringLength);
-      free(plistString); // should be plist_to_bin_free, but it's not defined in older
-                         // libraries
-      char *b = 0;
-      size_t l = 0;
-      sbuf_buf_and_length(sbuf, &b, &l);
-      result = ap2_event_port_send_message(conn, b, l);
-      debug(3, "Connection %d: POST /command sent on the event port. Result is %zd.",
-            conn->connection_number, result);
+      int build_ok = 1;
+      if (sbuf_printf(sbuf, "POST /command RTSP/1.0\r\nContent-Length: %u\r\n", plistStringLength) < 0)
+        build_ok = 0;
+      if ((build_ok != 0) &&
+          (sbuf_printf(sbuf, "Content-Type: application/x-apple-binary-plist\r\n\r\n") < 0))
+        build_ok = 0;
+      if ((build_ok != 0) && (sbuf_append(sbuf, plistString, plistStringLength) < 0))
+        build_ok = 0;
+
+      free(plistString); // should be plist_to_bin_free, but it's not defined in older libraries
+
+      if (build_ok != 0) {
+        char *b = 0;
+        size_t l = 0;
+        if (sbuf_buf_and_length(sbuf, &b, &l) == 0) {
+          result = ap2_event_port_send_message(conn, b, l);
+          debug(3, "Connection %d: POST /command sent on the event port. Result is %zd.",
+                conn->connection_number, result);
+        } else {
+          result = -1;
+        }
+      } else {
+        result = -1;
+      }
       sbuf_clear(sbuf);
     }
     pthread_cleanup_pop(1); // delete the structured buffer
@@ -114,7 +127,15 @@ ssize_t ap2_event_send_update_info(rtsp_conn_info *conn) {
     void *txtData = NULL;
     size_t txtDataLength = 0;
     generateTxtDataValueInfo(conn, &txtData, &txtDataLength);
-    plist_dict_set_item(value_plist, "txtAirPlay", plist_new_data(txtData, txtDataLength));
+    if ((txtData != NULL) || (txtDataLength == 0)) {
+      plist_t txt_item = plist_new_data(txtData, txtDataLength);
+      if (txt_item != NULL)
+        plist_dict_set_item(value_plist, "txtAirPlay", txt_item);
+      else
+        debug(1, "Could not build txtAirPlay plist data item");
+    } else {
+      debug(1, "Could not build txtAirPlay data");
+    }
     free(txtData);
     plist_t update_info_plist = plist_new_dict();
     if (update_info_plist != NULL) {

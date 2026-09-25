@@ -39,7 +39,8 @@ void ap2_event_receiver_cleanup_handler(void *arg) {
   // debug(1, "Connection %d: AP2 Event Receiver Cleanup start.", conn->connection_number);
 #ifdef CONFIG_METADATA
   // this is here to ensure it's only performed once during a teardown of a ptp stream
-  send_ssnc_metadata('disc', conn->client_ip_string, strlen(conn->client_ip_string), 1);
+  if (conn->client_ip_string != NULL)
+    send_ssnc_metadata('disc', conn->client_ip_string, strlen(conn->client_ip_string), 1);
 #endif
   pthread_mutex_lock(&conn->event_sender_mutex);
   pthread_cleanup_push(mutex_unlock, &conn->event_sender_mutex);
@@ -70,14 +71,17 @@ void *ap2_event_receiver(void *arg) {
   conn->event_channel_fd =
       eintr_checked_accept(conn->event_socket, (struct sockaddr *)&remote_addr, &addr_size);
   pthread_cleanup_pop(1); // unlock the mutex
-  if (conn->event_channel_fd > 0) {
+  if (conn->event_channel_fd >= 0) {
     debug(2,
           "Connection %d: ap2_event_receiver accepted a connection on socket %d and moved to a new "
           "socket %d.",
           conn->connection_number, conn->event_socket, conn->event_channel_fd);
     pthread_cleanup_push(ap2_event_receiver_cleanup_handler, arg);
 
-    ap2_event_send_update_info(conn);
+    ssize_t update_info_result = ap2_event_send_update_info(conn);
+    if (update_info_result < 0)
+      debug(1, "Connection %d: could not send initial update-info on event channel.",
+            conn->connection_number);
 
     while (1) {
       usleep(100000);

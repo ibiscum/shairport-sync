@@ -28,7 +28,9 @@
 #include "common.h"
 #include <errno.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 int eintr_checked_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   int response;
@@ -36,10 +38,19 @@ int eintr_checked_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) 
     response = accept(sockfd, addr, addrlen);
 
     if (response == -1) {
+  int err = errno;
       char errorstring[1024];
-      strerror_r(errno, (char *)errorstring, sizeof(errorstring));
-      debug(1, "error %d accept()ing a socket %d: \"%s\". (Note: error %d will be ignored.)", errno,
-            sockfd, errorstring, EINTR);
+#if defined(__GLIBC__) && defined(__USE_GNU)
+  char *errp = strerror_r(err, (char *)errorstring, sizeof(errorstring));
+  const char *errmsg = (errp != NULL) ? errp : "unknown error";
+#else
+  const char *errmsg = errorstring;
+  if (strerror_r(err, (char *)errorstring, sizeof(errorstring)) != 0)
+    snprintf(errorstring, sizeof(errorstring), "error %d", err);
+#endif
+  debug(1, "error %d accept()ing a socket %d: \"%s\". (Note: error %d will be ignored.)", err,
+    sockfd, errmsg, EINTR);
+  errno = err;
     }
 
   } while ((response == -1) && (errno == EINTR));
@@ -50,17 +61,21 @@ pthread_mutex_t safe_socket_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int _safe_socket_close(const char *filename, const int linenumber, int *sockfd) {
   int result = 0;
+
+  if (sockfd == NULL) {
+    errno = EINVAL;
+    _debug(filename, linenumber, 1, "_safe_socket_close: sockfd pointer is NULL!");
+    return -1;
+  }
+
   int oldstate;
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
   pthread_mutex_lock(&safe_socket_lock);
-  if (*sockfd == 0) {
-    _debug(filename, linenumber, 1, "_safe_socket_close: socket is zero!");
-  }
-  if ((*sockfd != -1) && (*sockfd != 0)) {
-    _debug(filename, linenumber, 4, "_safe_socket_close: closing socket %d.", *sockfd);
-    result = close(*sockfd);
-    if (result == 0)
-      *sockfd = -1;
+  if (*sockfd >= 0) {
+    int fd_to_close = *sockfd;
+    _debug(filename, linenumber, 4, "_safe_socket_close: closing socket %d.", fd_to_close);
+    *sockfd = -1;
+    result = close(fd_to_close);
   } else {
     _debug(filename, linenumber, 1, "_safe_socket_close: socket already closed!");
   }

@@ -8,6 +8,8 @@
 int ap2_allocation_succeeded(const void *pointer);
 
 // Returns 1 when data_len can be represented as a payload size that fits in packet_capacity.
+// On success, writes the payload size (data_len - 2) to packet_size_out when packet_size_out
+// is non-NULL. On failure, packet_size_out is left unchanged.
 int ap2_calculate_buffered_audio_packet_size(uint16_t data_len, size_t packet_capacity,
                                              size_t *packet_size_out);
 

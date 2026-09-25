@@ -1,3 +1,7 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 /*
 MIT License
 
@@ -151,7 +155,8 @@ void _die(const char *filename, const int linenumber, const char *format, ...) {
   if (local_exit_requester != NULL) {
     local_exit_requester(EXIT_FAILURE);
     // wait for the exit request to be honoured
-    usleep(1000000);
+    struct timespec ts = {.tv_sec = 1, .tv_nsec = 0};
+    nanosleep(&ts, NULL);
     // if not, head for the hills
     fprintf(stderr, "fatal error: exit cleanup could not be completed.\n");
     _Exit(EXIT_FAILURE);
@@ -306,7 +311,7 @@ void _debug_print_buffer(const char *thefilename, const int linenumber, int leve
       }
 
       for (j = 0; j < remaining; j++) {
-        if (isprint(vbuf[i * hexdump_cols + j])) {
+        if (isprint(vbuf[starting_offset + j])) {
           *bufp = 0xFF & vbuf[starting_offset + j];
         } else {
           *bufp = '.';

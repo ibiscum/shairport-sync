@@ -117,7 +117,8 @@ static void on_process(void *userdata) {
     struct pw_buffer *b = pw_stream_dequeue_buffer(local_data->stream);
     if (b == NULL) {
       pw_log_warn("out of buffers: %m");
-      die("PipeWire failure -- out of buffers!");
+      pthread_mutex_unlock(&buffer_mutex);
+      return;
     }
     struct spa_buffer *buf = b->buffer;
     uint8_t *dest = buf->datas[0].data;
@@ -188,6 +189,7 @@ static void deinit(void) {
     data.loop = NULL;
   }
   pw_deinit();
+  pthread_mutex_lock(&buffer_mutex);
   on_process_is_running = 0;
   stream_is_active = 0;
   if (audio_lmb != NULL) {
@@ -199,6 +201,7 @@ static void deinit(void) {
   audio_eoq = NULL;
   audio_size = 0;
   audio_occupancy = 0;
+  pthread_mutex_unlock(&buffer_mutex);
 }
 
 static int init(__attribute__((unused)) int argc, __attribute__((unused)) char **argv) {
@@ -499,8 +502,10 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
         audio_pw_next_configured_format(requested_encoded_format, response);
     if (response != 0)
       debug(1, "pw: stream connect failed: %d.", response);
+    pthread_mutex_lock(&buffer_mutex);
     stream_is_active = 0;
     enable_fill = 1;
+    pthread_mutex_unlock(&buffer_mutex);
     pw_thread_loop_unlock(data.loop);
     int64_t elapsed_time = get_absolute_time_in_ns() - start_time;
     debug(3, "pw: configuration took %0.3f mS.", elapsed_time * 0.000001);
@@ -516,12 +521,19 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
 static int play(__attribute__((unused)) void *buf, int samples,
                 __attribute__((unused)) int sample_type, __attribute__((unused)) uint32_t timestamp,
                 __attribute__((unused)) uint64_t playtime) {
+  int should_activate_stream = 0;
+  pthread_mutex_lock(&buffer_mutex);
   if (stream_is_active == 0) {
+    stream_is_active = 1;
     pw_thread_loop_lock(data.loop);
     on_process_is_running = 0;
+    should_activate_stream = 1;
+  }
+  pthread_mutex_unlock(&buffer_mutex);
+
+  if (should_activate_stream != 0) {
     pw_stream_set_active(data.stream, true);
     pw_thread_loop_unlock(data.loop);
-    stream_is_active = 1;
     // debug(1, "set stream active");
   }
   // copy the samples into the queue
@@ -550,17 +562,27 @@ static int play(__attribute__((unused)) void *buf, int samples,
 }
 
 static int delay(long *the_delay) {
+  if (the_delay == NULL)
+    return -EINVAL;
+
   long result = 0;
   int reply = -ENODEV; // ENODATA is not defined in FreeBSD
+  int local_on_process_is_running = 0;
+  int local_stream_is_active = 0;
 
-  if (on_process_is_running == 0) {
+  pthread_mutex_lock(&buffer_mutex);
+  local_on_process_is_running = on_process_is_running;
+  local_stream_is_active = stream_is_active;
+  pthread_mutex_unlock(&buffer_mutex);
+
+  if (local_on_process_is_running == 0) {
     debug(3, "pw_processor not running");
   }
 
-  if ((stream_is_active == 0) && (on_process_is_running != 0)) {
+  if ((local_stream_is_active == 0) && (local_on_process_is_running != 0)) {
     debug(3, "stream not active but on_process_is_running is true.");
   }
-  if (on_process_is_running != 0) {
+  if (local_on_process_is_running != 0) {
 
     struct pw_time stream_time_info_1, stream_time_info_2;
     ssize_t audio_occupancy_now;
@@ -650,12 +672,19 @@ static void stop(void) {
   //   debug(1, "stop enable_fill");
   // }
   pthread_mutex_unlock(&buffer_mutex);
-  if (stream_is_active == 1) {
+  int should_deactivate_stream = 0;
+  pthread_mutex_lock(&buffer_mutex);
+  should_deactivate_stream = stream_is_active;
+  pthread_mutex_unlock(&buffer_mutex);
+
+  if (should_deactivate_stream == 1) {
     pw_thread_loop_lock(data.loop);
     // pw_stream_flush(data.stream, true);
     pw_stream_set_active(data.stream, false);
     pw_thread_loop_unlock(data.loop);
+    pthread_mutex_lock(&buffer_mutex);
     stream_is_active = 0;
+    pthread_mutex_unlock(&buffer_mutex);
     // debug(1, "set stream inactive");
   }
 }

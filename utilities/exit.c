@@ -37,6 +37,9 @@ SOFTWARE.
 #include <stdlib.h> // for EXIT_SUCCESS
 #include <string.h> // for memset
 #include <unistd.h> // for usleep
+#include <stdint.h> // for uint64_t
+#include <errno.h> // for EINTR
+#include <sys/eventfd.h>
 #include <pthread.h>
 
 #include "exit.h"
@@ -44,12 +47,25 @@ SOFTWARE.
 
 volatile sig_atomic_t exit_request_flag = 0;
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+static volatile sig_atomic_t exit_manager_available = 0;
+static int exit_wakeup_fd = -1;
 
 pthread_t exit_manager_thread;
 
 void *exit_manager(__attribute__((unused)) void *arg) {
   while(exit_request_flag == 0) {
-    usleep(100000);
+    if (exit_wakeup_fd >= 0) {
+      uint64_t wakeup_count;
+      ssize_t n;
+      do {
+        n = read(exit_wakeup_fd, &wakeup_count, sizeof(wakeup_count));
+      } while ((n == -1) && (errno == EINTR));
+      if (n != (ssize_t)sizeof(wakeup_count)) {
+        usleep(100000);
+      }
+    } else {
+      usleep(100000);
+    }
   }
   exit(exit_status);
   return NULL;
@@ -57,10 +73,31 @@ void *exit_manager(__attribute__((unused)) void *arg) {
 
 void exit_init() {
   memset(&exit_manager_thread, 0, sizeof(pthread_t));
-  named_pthread_create(&exit_manager_thread, NULL, &exit_manager, NULL, "exit_manager");
+  exit_wakeup_fd = eventfd(0, EFD_CLOEXEC);
+  if (exit_wakeup_fd == -1) {
+    warn("exit_init: eventfd init failed; using polling fallback.");
+  }
+  int rc = named_pthread_create(&exit_manager_thread, NULL, &exit_manager, NULL, "exit_manager");
+  if (rc == 0) {
+    exit_manager_available = 1;
+  } else {
+    exit_manager_available = 0;
+    if (exit_wakeup_fd != -1) {
+      close(exit_wakeup_fd);
+      exit_wakeup_fd = -1;
+    }
+    warn("exit_init: failed to start exit manager thread (%d); falling back to immediate _Exit.",
+         rc);
+  }
 }
 
 void exit_request(const int exit_status_requested) {
   exit_status = exit_status_requested; // EXIT_SUCCESS or EXIT_FAILURE
   exit_request_flag = 1; // ask for exit
+  if (exit_wakeup_fd >= 0) {
+    uint64_t increment = 1;
+    (void)write(exit_wakeup_fd, &increment, sizeof(increment));
+  }
+  if (exit_manager_available == 0)
+    _Exit(exit_status_requested);
 }

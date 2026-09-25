@@ -172,7 +172,8 @@ endif
 if USE_AIRPLAY_2
 shairport_sync_SOURCES += ap2_buffered_audio_processor.c ap2_event_receiver.c \
   ap2_event_message_handler.c ptp-utilities.c \
-  utilities/buffered_read.c utilities/structured_buffer.c utilities/mod23.c \
+	utilities/buffered_read.c utilities/structured_buffer.c utilities/mod23.c \
+	utilities/ap2_packet_validation.c \
   utilities/generate_random_uuid.c utilities/generate_device_uuid.c \
   plists/get_info_response.c
 shairport_sync_LDADD += lib_pair_ap.a

@@ -79,4 +79,6 @@ Timestamps are referenced relative to the source computer's clock – the "sourc
 
 ```bash
 ./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire
+
+./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire --with-airplay-2
 ```

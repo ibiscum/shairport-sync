@@ -34,6 +34,7 @@
 #include "utilities/network_utilities.h"
 #include <sodium.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef CONFIG_CONVOLUTION
 #include "FFTConvolver/convolver.h"
@@ -228,11 +229,13 @@ void *rtp_buffered_audio_processor(void *arg) {
       // play newly started
       debug(2, "Play started.");
       new_audio_block_needed = 1;
+      previous_buffer_should_be_time = 0;
     }
 
     if ((play_enabled != 0) && (conn->ap2_play_enabled == 0)) {
       debug(2, "Play stopped.");
       packets_played_in_this_sequence = 0; // not all blocks read are played...
+      previous_buffer_should_be_time = 0;
 #ifdef CONFIG_CONVOLUTION
       convolver_clear_state();
 #endif
@@ -346,11 +349,20 @@ void *rtp_buffered_audio_processor(void *arg) {
         debug(2, "Connection %d: buffered audio port closed!", conn->connection_number);
         finished = 1;
       } else if (nread < 0) {
+        int err = errno;
         char errorstring[1024];
-        (void)!strerror_r(errno, (char *)errorstring,
-                          sizeof(errorstring)); // (void) ! to suppress unused response warning
+        const char *errmsg = errorstring;
+#if defined(__GLIBC__) && defined(__USE_GNU)
+        char *errp = strerror_r(err, (char *)errorstring, sizeof(errorstring));
+        if (errp != NULL)
+          errmsg = errp;
+#else
+        if (strerror_r(err, (char *)errorstring, sizeof(errorstring)) != 0)
+          errmsg = "unknown error";
+#endif
         debug(1, "error in rtp_buffered_audio_processor %d: \"%s\". Could not recv a data_len .",
-              errno, errorstring);
+              err, errmsg);
+        errno = err;
         finished = 1;
       }
     }
@@ -578,25 +590,34 @@ void *rtp_buffered_audio_processor(void *arg) {
                   if ((response == 0) && (new_payload_length > 0)) {
                     // now we have the deciphered block, so send it to the player if we can
                     payload_length = new_payload_length;
+                    int adts_too_large = 0;
 
                     if (ssrc_is_aac(payload_ssrc)) {
-                      payload_pointer =
-                          payload_pointer - 7; // including the 7-byte leader for the ADTS
-                      payload_length = payload_length + 7;
+                      if (payload_length + 7 > 0x1FFF) {
+                        debug(1,
+                              "Connection %d: AAC frame too large for ADTS header: %llu bytes.",
+                              conn->connection_number, payload_length + 7);
+                        adts_too_large = 1;
+                      } else {
+                        payload_pointer =
+                            payload_pointer - 7; // including the 7-byte leader for the ADTS
+                        payload_length = payload_length + 7;
 
-                      // now, fill in the 7-byte ADTS information, which seems to be needed by the
-                      // decoder we made room for it in the front of the buffer by filling from m
-                      // + 7.
-                      int channelConfiguration = 2; // 2: 2 channels: front-left, front-right
-                      if (payload_ssrc == AAC_48000_F24_5P1)
-                        channelConfiguration = 6; // 6: 6 channels: front-center, front-left,
-                                                  // front-right, back-left, back-right, LFE-channel
-                      else if (payload_ssrc == AAC_48000_F24_7P1)
-                        channelConfiguration =
-                            7; // 7: 8 channels: front-center, front-left, front-right,
-                               // side-left, side-right, back-left, back-right, LFE-channel
-                      addADTStoPacket(payload_pointer, payload_length, conn->input_rate,
-                                      channelConfiguration);
+                        // now, fill in the 7-byte ADTS information, which seems to be needed by
+                        // the decoder we made room for it in the front of the buffer by filling
+                        // from m + 7.
+                        int channelConfiguration = 2; // 2: 2 channels: front-left, front-right
+                        if (payload_ssrc == AAC_48000_F24_5P1)
+                          channelConfiguration = 6; // 6: 6 channels: front-center, front-left,
+                                                    // front-right, back-left, back-right,
+                                                    // LFE-channel
+                        else if (payload_ssrc == AAC_48000_F24_7P1)
+                          channelConfiguration =
+                              7; // 7: 8 channels: front-center, front-left, front-right,
+                                 // side-left, side-right, back-left, back-right, LFE-channel
+                        addADTStoPacket(payload_pointer, payload_length, conn->input_rate,
+                                        channelConfiguration);
+                      }
                     }
                     int mute =
                         ((packets_played_in_this_sequence == 0) && (ssrc_is_aac(payload_ssrc)));
@@ -623,8 +644,10 @@ void *rtp_buffered_audio_processor(void *arg) {
                               "Positive means later, i.e. a gap. First timestamp was %u, payload "
                               "type: \"%s\".",
                               conn->connection_number, seq_no, timestamp, expected_timestamp,
-                              timestamp_difference,
-                              1000.0 * timestamp_difference / conn->input_rate,
+                                timestamp_difference,
+                                (conn->input_rate > 0)
+                                  ? (1000.0 * timestamp_difference / conn->input_rate)
+                                  : 0.0,
                               first_timestamp_in_this_sequence, get_ssrc_name(payload_ssrc));
                         // mute the first packet after a discontinuity
                         if (ssrc_is_aac(payload_ssrc)) {
@@ -669,7 +692,7 @@ void *rtp_buffered_audio_processor(void *arg) {
                               seq_no, timestamp_difference, get_ssrc_block_length(payload_ssrc));
                       }
                     }
-                    if (skip_this_block == 0) {
+                    if ((skip_this_block == 0) && (adts_too_large == 0)) {
                       uint32_t packet_size = player_put_packet(
                           payload_ssrc, sequence_number_for_player, timestamp, payload_pointer,
                           payload_length, mute, timestamp_difference, conn);
@@ -678,6 +701,7 @@ void *rtp_buffered_audio_processor(void *arg) {
                       sequence_number_for_player++;                 // simply increment
                       expected_timestamp = timestamp + packet_size; // for the next time
                       packets_played_in_this_sequence++;
+                      previous_buffer_should_be_time = buffer_should_be_time;
                     }
                   }
                 } else {
@@ -713,8 +737,12 @@ void *rtp_buffered_audio_processor(void *arg) {
                     seq_no, 1.0 * lead_time * 1E-9, config.audio_decoded_buffer_desired_length);
               very_early_packets_signalled = 1;
             }
-            usleep(((1000000 * conn->frames_per_packet) / conn->input_rate) *
-                   2); // wait for approximately the length of two packets
+            if (conn->input_rate > 0) {
+              usleep(((1000000 * conn->frames_per_packet) / conn->input_rate) *
+                     2); // wait for approximately the length of two packets
+            } else {
+              usleep(20000);
+            }
           }
         } else {
           debug(4, "just you wait, Henry Higgins, without valid timing information...");
