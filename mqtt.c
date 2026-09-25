@@ -1,5 +1,7 @@
 #include <ctype.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +24,8 @@
 #include "metadata/pc_queue.h"
 
 #include "mqtt.h"
-#include <mosquitto.h>
+
+#ifdef CONFIG_MQTT
 // this is for receiving metadata
 
 pc_queue metadata_mqtt_queue;
@@ -32,7 +35,24 @@ pthread_t metadata_mqtt_thread;
 
 // this holds the mosquitto client
 struct mosquitto *global_mosq = NULL;
-int connected = 0;
+static int connected = 0;
+static int mqtt_lib_initialised = 0;
+static int metadata_mqtt_queue_initialised = 0;
+static pthread_mutex_t mqtt_state_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void mqtt_set_connected(int state) {
+  pthread_mutex_lock(&mqtt_state_mutex);
+  connected = state;
+  pthread_mutex_unlock(&mqtt_state_mutex);
+}
+
+static int mqtt_is_connected(void) {
+  int state;
+  pthread_mutex_lock(&mqtt_state_mutex);
+  state = connected;
+  pthread_mutex_unlock(&mqtt_state_mutex);
+  return state;
+}
 
 // mosquitto logging
 void _cb_log(__attribute__((unused)) struct mosquitto *mosq, __attribute__((unused)) void *userdata,
@@ -51,7 +71,8 @@ void _cb_log(__attribute__((unused)) struct mosquitto *mosq, __attribute__((unus
     inform("%s", str);
     break;
   case MOSQ_LOG_ERR: {
-    die("MQTT: Error: %s\n", str);
+    warn("MQTT: Error: %s", str);
+    break;
   }
   }
 }
@@ -60,12 +81,39 @@ void _cb_log(__attribute__((unused)) struct mosquitto *mosq, __attribute__((unus
 void on_message(__attribute__((unused)) struct mosquitto *mosq,
                 __attribute__((unused)) void *userdata, const struct mosquitto_message *msg) {
 
-  // null-terminate the payload
-  char payload[msg->payloadlen + 1];
-  memcpy(payload, msg->payload, msg->payloadlen);
-  payload[msg->payloadlen] = 0;
+  if ((msg == NULL) || (msg->payload == NULL) || (msg->payloadlen < 0)) {
+    debug(1, "[MQTT]: received invalid message payload");
+    return;
+  }
 
-  debug(2, "[MQTT]: received Message on topic %s: %s\n", msg->topic, payload);
+  size_t payload_len = (size_t)msg->payloadlen;
+  if (payload_len > 4096) {
+    warn("[MQTT]: received oversized command payload (%zu bytes), ignoring", payload_len);
+    return;
+  }
+
+  // null-terminate the payload
+  char *payload = malloc(payload_len + 1);
+  if (payload == NULL) {
+    warn("[MQTT]: failed to allocate buffer for incoming command");
+    return;
+  }
+  memcpy(payload, msg->payload, payload_len);
+  payload[payload_len] = 0;
+
+  char *command = payload;
+  while (*command && isspace((unsigned char)*command))
+    command++;
+  char *command_end = command + strlen(command);
+  while ((command_end > command) && isspace((unsigned char)command_end[-1]))
+    *--command_end = '\0';
+
+  if (*command == '\0') {
+    free(payload);
+    return;
+  }
+
+  debug(2, "[MQTT]: received Message on topic %s: %s\n", msg->topic, command);
 
   // All recognized commands
   char *commands[] = {"command",    "beginff",  "beginrew",   "mutetoggle",
@@ -78,56 +126,80 @@ void on_message(__attribute__((unused)) struct mosquitto *mosq,
 
   // send command if it's a valid one
   while (commands[it] != NULL) {
-    if ((size_t)msg->payloadlen >= strlen(commands[it]) &&
-        strncmp(msg->payload, commands[it], strlen(commands[it])) == 0) {
+    if (strcmp(command, commands[it]) == 0) {
       debug(2, "[MQTT]: Received Recognized Command: %s\n", commands[it]);
       if (strcmp(commands[it], "disconnect") == 0) {
         debug(2, "[MQTT]: Disconnect Command: %s\n", commands[it]);
         stop_play(); // stop any current session and don't replace it
       } else if (strcmp(commands[it], "queue_next") == 0) {
-        // payload is "queue_next <track_id>", where <track_id> is the hex track_id
-        // string as published by shairport-sync itself (see the "mper"/"track_id" handling
-        // above), e.g. "queue_next 1A2B3C4D5E6F7"
-        char *track_id = payload + strlen(commands[it]);
-        while (*track_id == ' ' || *track_id == '\t')
-          track_id++;
-        size_t track_id_len = strlen(track_id);
-        while (track_id_len > 0 && isspace((unsigned char)track_id[track_id_len - 1]))
-          track_id[--track_id_len] = '\0';
-        if (track_id_len == 0) {
-          warn("[MQTT]: queue_next command received with no track_id -- ignoring.");
-        } else {
-          char dacp_command[256];
-          snprintf(dacp_command, sizeof(dacp_command),
-                   "cue?command=add&query='dmap.persistentid:0x%s'&mode=3", track_id);
-          debug(2, "[MQTT]: Queue Next Command: %s\n", dacp_command);
-          send_simple_dacp_command(dacp_command);
-        }
+        warn("[MQTT]: queue_next command requires a track_id argument");
       } else {
         debug(2, "[MQTT]: DACP Command: %s\n", commands[it]);
 #ifdef CONFIG_DACP_CLIENT
         send_simple_dacp_command(commands[it]);
+#else
+        warn("[MQTT]: command \"%s\" ignored because DACP client support is disabled", commands[it]);
 #endif
       }
       break;
     }
     it++;
   }
+
+  if (strncmp(command, "queue_next", strlen("queue_next")) == 0) {
+    char next = command[strlen("queue_next")];
+    if ((next == ' ') || (next == '\t')) {
+      // command format is "queue_next <track_id>", where <track_id> is the hex track_id
+      // string as published by shairport-sync itself.
+      char *track_id = command + strlen("queue_next");
+      while ((*track_id == ' ') || (*track_id == '\t'))
+        track_id++;
+      size_t track_id_len = strlen(track_id);
+      while ((track_id_len > 0) && isspace((unsigned char)track_id[track_id_len - 1]))
+        track_id[--track_id_len] = '\0';
+      if (track_id_len == 0) {
+        warn("[MQTT]: queue_next command received with no track_id -- ignoring.");
+      } else {
+        char dacp_command[256];
+        snprintf(dacp_command, sizeof(dacp_command),
+                 "cue?command=add&query='dmap.persistentid:0x%s'&mode=3", track_id);
+        debug(2, "[MQTT]: Queue Next Command: %s\n", dacp_command);
+#ifdef CONFIG_DACP_CLIENT
+        send_simple_dacp_command(dacp_command);
+#else
+        warn("[MQTT]: queue_next ignored because DACP client support is disabled");
+#endif
+      }
+      free(payload);
+      return;
+    }
+  }
+
+  if (commands[it] == NULL)
+    debug(2, "[MQTT]: Unrecognised command payload ignored: %s", command);
+
+  free(payload);
 }
 
 void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
                    __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {
-  connected = 0;
+  mqtt_set_connected(0);
   debug(2, "[MQTT]: disconnected");
 }
 
 void on_connect(struct mosquitto *mosq, __attribute__((unused)) void *userdata,
-                __attribute__((unused)) int rc) {
-  connected = 1;
+                int rc) {
+  if (rc != 0) {
+    mqtt_set_connected(0);
+    warn("[MQTT]: connect callback returned error code %d", rc);
+    return;
+  }
+
+  mqtt_set_connected(1);
   debug(2, "[MQTT]: connected");
 
   // subscribe if requested
-  if (config.mqtt_enable_remote) {
+  if (config.mqtt_enable_remote && config.mqtt_topic) {
     char remotetopic[strlen(config.mqtt_topic) + 8];
     snprintf(remotetopic, strlen(config.mqtt_topic) + 8, "%s/remote", config.mqtt_topic);
     mosquitto_subscribe(mosq, NULL, remotetopic, 0);
@@ -141,13 +213,20 @@ void on_connect(struct mosquitto *mosq, __attribute__((unused)) void *userdata,
 
 // function to send autodiscovery messages for Home Assistant
 void send_autodiscovery_messages(struct mosquitto *mosq) {
+  if ((mosq == NULL) || (config.service_name == NULL) || (config.mqtt_topic == NULL))
+    return;
+
   const char *device_name = config.service_name;
 #ifdef CONFIG_AIRPLAY_2
   const char *device_id = config.airplay_device_id ? config.airplay_device_id : config.service_name;
 #else
   const char *device_id = config.service_name;
 #endif
-  const char *device_id_no_colons = str_replace(device_id, ":", "");
+  char *device_id_no_colons = str_replace(device_id, ":", "");
+  if (device_id_no_colons == NULL) {
+    warn("[MQTT]: failed to prepare autodiscovery device id");
+    return;
+  }
   const char *sw_version = get_version_string();
   const char *model = "shairport-sync";
   const char *model_friendly = "Shairport Sync";
@@ -272,10 +351,15 @@ void send_autodiscovery_messages(struct mosquitto *mosq) {
     mosquitto_publish(mosq, NULL, topic, strlen(payload), payload, 0, true);
     debug(2, "[MQTT]: published autodiscovery for %s", id_string);
   }
+
+  free(device_id_no_colons);
 }
 
 // helper function to publish under a topic and automatically append the main topic
 void mqtt_publish(char *topic, char *data_in, uint32_t length_in) {
+  if ((global_mosq == NULL) || (topic == NULL) || (config.mqtt_topic == NULL))
+    return;
+
   char *data = data_in;
   uint32_t length = length_in;
 
@@ -284,13 +368,18 @@ void mqtt_publish(char *topic, char *data_in, uint32_t length_in) {
     data = config.mqtt_empty_payload_substitute;
   }
 
+  if (length > INT_MAX) {
+    warn("[MQTT]: Publish failed: payload too large");
+    return;
+  }
+
   char fulltopic[strlen(config.mqtt_topic) + strlen(topic) + 3];
   snprintf(fulltopic, strlen(config.mqtt_topic) + strlen(topic) + 2, "%s/%s", config.mqtt_topic,
            topic);
   debug(2, "[MQTT]: publishing under %s", fulltopic);
 
   int rc;
-  if ((rc = mosquitto_publish(global_mosq, NULL, fulltopic, length, data, 0,
+  if ((rc = mosquitto_publish(global_mosq, NULL, fulltopic, (int)length, data, 0,
                               config.mqtt_publish_retain)) != MOSQ_ERR_SUCCESS) {
     switch (rc) {
     case MOSQ_ERR_NO_CONN:
@@ -305,7 +394,7 @@ void mqtt_publish(char *topic, char *data_in, uint32_t length_in) {
 
 // handler for incoming metadata
 void mqtt_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t length) {
-  if (global_mosq == NULL || connected != 1) {
+  if (global_mosq == NULL || mqtt_is_connected() != 1) {
     debug(3, "[MQTT]: Client not connected, skipping metadata handling");
     return;
   }
@@ -444,24 +533,37 @@ int initialise_mqtt() {
     debug(1, "[MQTT]: Not initialized, as the hostname is not set");
     return 0;
   }
+
+  if (global_mosq != NULL)
+    metadata_mqtt_close();
+
   int keepalive = 60;
-  mosquitto_lib_init();
+  if (mqtt_lib_initialised == 0) {
+    mosquitto_lib_init();
+    mqtt_lib_initialised = 1;
+  }
+
   if (!(global_mosq = mosquitto_new(config.service_name, true, NULL))) {
-    die("[MQTT]: FATAL: Could not create mosquitto object!");
+    warn("[MQTT]: Could not create mosquitto object!");
+    return -1;
   }
 
   if (config.mqtt_cafile != NULL || config.mqtt_capath != NULL || config.mqtt_certfile != NULL ||
       config.mqtt_keyfile != NULL) {
     if (mosquitto_tls_set(global_mosq, config.mqtt_cafile, config.mqtt_capath, config.mqtt_certfile,
                           config.mqtt_keyfile, NULL) != MOSQ_ERR_SUCCESS) {
-      die("[MQTT]: TLS Setup failed");
+      warn("[MQTT]: TLS setup failed");
+      metadata_mqtt_close();
+      return -1;
     }
   }
 
   if (config.mqtt_username != NULL || config.mqtt_password != NULL) {
     if (mosquitto_username_pw_set(global_mosq, config.mqtt_username, config.mqtt_password) !=
         MOSQ_ERR_SUCCESS) {
-      die("[MQTT]: Username/Password set failed");
+      warn("[MQTT]: Username/password setup failed");
+      metadata_mqtt_close();
+      return -1;
     }
   }
   mosquitto_log_callback_set(global_mosq, _cb_log);
@@ -474,16 +576,27 @@ int initialise_mqtt() {
   mosquitto_connect_callback_set(global_mosq, on_connect);
   if (mosquitto_connect(global_mosq, config.mqtt_hostname, config.mqtt_port, keepalive)) {
     inform("[MQTT]: Could not establish a mqtt connection");
+    mqtt_set_connected(0);
   }
   if (mosquitto_loop_start(global_mosq) != MOSQ_ERR_SUCCESS) {
-    inform("[MQTT]: Could start MQTT Main loop");
+    inform("[MQTT]: Could not start MQTT main loop");
+    metadata_mqtt_close();
+    return -1;
   }
 
   return 0;
 }
 
 // metadata handling stuff
-void metadata_mqtt_close(void) {}
+void metadata_mqtt_close(void) {
+  mqtt_set_connected(0);
+  if (global_mosq) {
+    mosquitto_disconnect(global_mosq);
+    mosquitto_loop_stop(global_mosq, true);
+    mosquitto_destroy(global_mosq);
+    global_mosq = NULL;
+  }
+}
 
 void metadata_mqtt_thread_cleanup_function(__attribute__((unused)) void *arg) {
   // debug(2, "metadata_mqtt_thread_cleanup_function called");
@@ -520,24 +633,81 @@ void *metadata_mqtt_thread_function(__attribute__((unused)) void *ignore) {
 }
 
 void metadata_mqtt_queue_init() {
+  if (metadata_mqtt_queue_initialised)
+    return;
+
   // create a pc_queue for the MQTT handler
   pc_queue_init(&metadata_mqtt_queue, (char *)&metadata_mqtt_queue_items, sizeof(metadata_package),
                 metadata_mqtt_queue_size, "mqtt");
+  metadata_mqtt_queue_initialised = 1;
   if (named_pthread_create(&metadata_mqtt_thread, NULL, metadata_mqtt_thread_function, NULL,
-                           "metadata mqtt") != 0)
+                           "metadata mqtt") != 0) {
+    metadata_mqtt_thread = 0;
+    pc_queue_delete(&metadata_mqtt_queue);
+    metadata_mqtt_queue_initialised = 0;
     debug(1, "Failed to create metadata mqtt thread!");
+  }
 }
 void metadata_mqtt_queue_stop() {
   // debug(2, "metadata stop mqtt thread.");
   if (metadata_mqtt_thread) {
     pthread_cancel(metadata_mqtt_thread);
     pthread_join(metadata_mqtt_thread, NULL);
-    pc_queue_delete(&metadata_mqtt_queue);
     metadata_mqtt_thread = 0;
   }
+
+  if (metadata_mqtt_queue_initialised) {
+    pc_queue_delete(&metadata_mqtt_queue);
+    metadata_mqtt_queue_initialised = 0;
+  }
+
+  metadata_mqtt_close();
   // debug(2, "metadata stop mqtt done.");
 }
 int send_metadata_to_mqtt_queue(const uint32_t type, const uint32_t code, const char *data,
                                 const uint32_t length, rtsp_message *carrier, int block) {
   return send_metadata_to_queue(&metadata_mqtt_queue, type, code, data, length, carrier, block);
 }
+
+#else
+
+int initialise_mqtt() { return 0; }
+
+void mqtt_process_metadata(__attribute__((unused)) uint32_t type,
+                           __attribute__((unused)) uint32_t code,
+                           __attribute__((unused)) char *data,
+                           __attribute__((unused)) uint32_t length) {}
+
+void mqtt_publish(__attribute__((unused)) char *topic, __attribute__((unused)) char *data_in,
+                  __attribute__((unused)) uint32_t length_in) {}
+
+void send_autodiscovery_messages(__attribute__((unused)) struct mosquitto *mosq) {}
+
+void on_connect(__attribute__((unused)) struct mosquitto *mosq,
+                __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {}
+
+void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
+                   __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {}
+
+void on_message(__attribute__((unused)) struct mosquitto *mosq,
+                __attribute__((unused)) void *userdata,
+                __attribute__((unused)) const struct mosquitto_message *msg) {}
+
+void _cb_log(__attribute__((unused)) struct mosquitto *mosq,
+             __attribute__((unused)) void *userdata, __attribute__((unused)) int level,
+             __attribute__((unused)) const char *str) {}
+
+void metadata_mqtt_queue_init() {}
+
+void metadata_mqtt_queue_stop() {}
+
+int send_metadata_to_mqtt_queue(__attribute__((unused)) const uint32_t type,
+                                __attribute__((unused)) const uint32_t code,
+                                __attribute__((unused)) const char *data,
+                                __attribute__((unused)) const uint32_t length,
+                                __attribute__((unused)) rtsp_message *carrier,
+                                __attribute__((unused)) int block) {
+  return 0;
+}
+
+#endif
