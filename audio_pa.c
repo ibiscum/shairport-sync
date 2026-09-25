@@ -204,7 +204,7 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
       stream = NULL;
     }
 
-    audio_size = RATE_FROM_ENCODED_FORMAT(current_encoded_output_format) *
+    audio_size = (size_t)RATE_FROM_ENCODED_FORMAT(current_encoded_output_format) *
                  format_info->bytes_per_sample *
                  CHANNELS_FROM_ENCODED_FORMAT(current_encoded_output_format) * 1; // one seconds
     audio_lmb = malloc(audio_size);
