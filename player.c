@@ -4809,7 +4809,7 @@ void *player_thread_func(void *arg) {
                       } else {
 
                         size_t bytes_to_skip =
-                            frames_to_skip *
+                            (size_t)frames_to_skip *
                             CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
                             sps_format_sample_size(
                                 FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration));
