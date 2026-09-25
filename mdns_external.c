@@ -29,11 +29,14 @@
 #include "mdns.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
 int mdns_pid = 0;
+
+static void kill_mdns_child(void);
 
 /*
  * Do a fork followed by a execvp, handling execvp errors correctly.
@@ -58,11 +61,11 @@ static int fork_execvp(const char *file, char *const argv[]) {
         close(execpipe[0]);  // Close the read end
         execvp(file, argv);
         // If we reach this point then execve has failed.
-        // Write erno's value into the pipe and exit.
+        // Write errno's value into the pipe and exit.
         if (write(execpipe[1], &errno, sizeof(errno)) != sizeof(errno))
-          debug(1,
-                "Execve has failed and there was a further error writing an error message, duh.");
-        die("mdns_external: execve has failed.");
+          debug(1, "execvp failed and writing error to exec pipe also failed.");
+        close(execpipe[1]);
+        _exit(127);
       } else {              // Parent
         close(execpipe[1]); // Close the write end
 
@@ -74,6 +77,7 @@ static int fork_execvp(const char *file, char *const argv[]) {
         } else {
           response = pid;
         }
+        close(execpipe[0]);
       }
     }
   }
@@ -84,6 +88,8 @@ static int mdns_external_avahi_register(char *ap1name, __attribute__((unused)) c
                                         __attribute__((unused)) int port,
                                         __attribute__((unused)) char **txt_records,
                                         __attribute__((unused)) char **secondary_txt_records) {
+  kill_mdns_child();
+
   char mdns_port[6];
   snprintf(mdns_port, sizeof(mdns_port), "%d", config.port);
 
@@ -126,6 +132,8 @@ static int mdns_external_dns_sd_register(char *ap1name, __attribute__((unused)) 
                                          __attribute__((unused)) int port,
                                          __attribute__((unused)) char **txt_records,
                                          __attribute__((unused)) char **secondary_txt_records) {
+  kill_mdns_child();
+
   char mdns_port[6];
   snprintf(mdns_port, sizeof(mdns_port), "%d", config.port);
 
@@ -146,6 +154,7 @@ static int mdns_external_dns_sd_register(char *ap1name, __attribute__((unused)) 
 
     argv = argvwithoutmetadata;
 
+  argv[0] = "mDNSPublish";
   int pid = fork_execvp(argv[0], argv);
   if (pid >= 0) {
     mdns_pid = pid;
@@ -157,8 +166,8 @@ static int mdns_external_dns_sd_register(char *ap1name, __attribute__((unused)) 
 }
 
 static void kill_mdns_child(void) {
-  if (mdns_pid)
-    kill(mdns_pid, SIGTERM);
+  if ((mdns_pid > 0) && (kill(mdns_pid, SIGTERM) < 0) && (errno != ESRCH))
+    warn("Error sending SIGTERM to mDNS helper process %d: %s", mdns_pid, strerror(errno));
   mdns_pid = 0;
 }
 

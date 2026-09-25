@@ -370,6 +370,19 @@ static int avahi_update(char **txt_records, char **secondary_txt_records) {
     port = srvport;
   */
   int err = 0;
+  if (tpoll == NULL) {
+    debug(1, "avahi_update called while Avahi thread poll is not available.");
+    return -1;
+  }
+  if ((group == NULL) || (service_name == NULL)) {
+    debug(1, "avahi_update called before primary service registration is ready.");
+    return -1;
+  }
+  if ((secondary_txt_records != NULL) && (ap2_service_name == NULL)) {
+    debug(1, "avahi_update called with secondary txt records but AP2 service name is unavailable.");
+    return -1;
+  }
+
   AvahiIfIndex selected_interface;
   if (config.interface != NULL)
     selected_interface = config.interface_index;
@@ -410,34 +423,78 @@ static int avahi_register(char *ap1name, char *ap2name, int srvport, char **txt_
                           char **secondary_txt_records) {
   // debug(1, "avahi_register.");
   service_name = strdup(ap1name);
+  if (service_name == NULL) {
+    warn("couldn't allocate primary avahi service name.");
+    goto fail;
+  }
+
   if (ap2name != NULL)
     ap2_service_name = strdup(ap2name);
+  if ((ap2name != NULL) && (ap2_service_name == NULL)) {
+    warn("couldn't allocate secondary avahi service name.");
+    goto fail;
+  }
 
   text_record_string_list = avahi_string_list_new_from_array((const char **)txt_records, -1);
+  if ((txt_records != NULL) && (text_record_string_list == NULL)) {
+    warn("couldn't allocate primary avahi text record list.");
+    goto fail;
+  }
 
   if (secondary_txt_records != NULL)
     ap2_text_record_string_list =
         avahi_string_list_new_from_array((const char **)secondary_txt_records, -1);
+  if ((secondary_txt_records != NULL) && (ap2_text_record_string_list == NULL)) {
+    warn("couldn't allocate secondary avahi text record list.");
+    goto fail;
+  }
 
   port = srvport;
 
   int err;
   if (!(tpoll = avahi_threaded_poll_new())) {
     warn("couldn't create avahi threaded tpoll!");
-    return -1;
+    goto fail;
   }
   if (!(client = avahi_client_new(avahi_threaded_poll_get(tpoll), AVAHI_CLIENT_NO_FAIL,
                                   client_callback, NULL, &err))) {
     warn("couldn't create avahi client: %s!", avahi_strerror(err));
-    return -1;
+    goto fail;
   }
 
   if (avahi_threaded_poll_start(tpoll) < 0) {
     warn("couldn't start avahi tpoll thread");
-    return -1;
+    goto fail;
   }
 
   return 0;
+
+fail:
+  if (client) {
+    avahi_client_free(client);
+    client = NULL;
+  }
+  if (tpoll) {
+    avahi_threaded_poll_free(tpoll);
+    tpoll = NULL;
+  }
+  if (text_record_string_list) {
+    avahi_string_list_free(text_record_string_list);
+    text_record_string_list = NULL;
+  }
+  if (ap2_text_record_string_list) {
+    avahi_string_list_free(ap2_text_record_string_list);
+    ap2_text_record_string_list = NULL;
+  }
+  if (service_name) {
+    free(service_name);
+    service_name = NULL;
+  }
+  if (ap2_service_name) {
+    free(ap2_service_name);
+    ap2_service_name = NULL;
+  }
+  return -1;
 }
 
 static void avahi_unregister(void) {
@@ -502,14 +559,20 @@ void avahi_dacp_monitor_set_id(const char *dacp_id) {
       ((dbs->dacp_id == NULL) && (dacp_id == NULL))) {
     debug(3, "no change...");
   } else {
-    if (dbs->dacp_id)
+    if (dbs->dacp_id) {
       free(dbs->dacp_id);
+      dbs->dacp_id = NULL;
+    }
     if (dacp_id == NULL)
       dbs->dacp_id = NULL;
     else {
       char *t = strdup(dacp_id);
       if (t) {
         dbs->dacp_id = t;
+        if ((tpoll == NULL) || (client == NULL)) {
+          debug(1, "avahi_dacp_monitor_set_id called before Avahi is ready.");
+          return;
+        }
         pthread_avahi_threaded_poll_lock_and_push(tpoll);
         // avahi_threaded_poll_lock(tpoll);
         if (dbs->service_browser)
@@ -535,15 +598,21 @@ void avahi_dacp_monitor_stop() {
   // debug(1, "avahi_dacp_monitor_stop");
   dacp_browser_struct *dbs = &private_dbs;
   // stop and dispose of everything
-  pthread_avahi_threaded_poll_lock_and_push(tpoll);
-  // avahi_threaded_poll_lock(tpoll);
-  if (dbs->service_browser) {
+  if (tpoll) {
+    pthread_avahi_threaded_poll_lock_and_push(tpoll);
+    // avahi_threaded_poll_lock(tpoll);
+    if (dbs->service_browser) {
+      avahi_service_browser_free(dbs->service_browser);
+      dbs->service_browser = NULL;
+    }
+    pthread_cleanup_pop(1); // unlock the avahi_threaded_poll_lock
+    // avahi_threaded_poll_unlock(tpoll);
+  } else if (dbs->service_browser) {
     avahi_service_browser_free(dbs->service_browser);
     dbs->service_browser = NULL;
   }
-  pthread_cleanup_pop(1); // unlock the avahi_threaded_poll_lock
-  // avahi_threaded_poll_unlock(tpoll);
   free(dbs->dacp_id);
+  dbs->dacp_id = NULL;
   debug(2, "avahi_dacp_monitor_stop Avahi DACP monitor successfully stopped");
 }
 

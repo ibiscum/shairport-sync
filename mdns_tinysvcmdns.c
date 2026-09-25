@@ -35,6 +35,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifndef IFF_LOOPBACK
+#define IFF_LOOPBACK 0x8
+#endif
+
 #include "tinysvcmdns.h"
 
 static struct mdnsd *svr = NULL;
@@ -66,6 +70,8 @@ static int mdns_tinysvcmdns_register(char *ap1name, __attribute__((unused)) char
 
   if (getifaddrs(&ifalist) < 0) {
     warn("tinysvcmdns: getifaddrs() failed");
+    mdnsd_stop(svr);
+    svr = NULL;
     return -1;
   }
 
@@ -94,11 +100,17 @@ static int mdns_tinysvcmdns_register(char *ap1name, __attribute__((unused)) char
 
   if (ifa == NULL) {
     warn("tinysvcmdns: no non-loopback ipv4 or ipv6 interface found");
+    freeifaddrs(ifalist);
+    mdnsd_stop(svr);
+    svr = NULL;
     return -1;
   }
 
   // Skip the first one, it was already added by set_hostname
   for (ifa = ifa->ifa_next; ifa != NULL; ifa = ifa->ifa_next) {
+    if (ifa->ifa_addr == NULL)
+      continue;
+
     if (ifa->ifa_flags & IFF_LOOPBACK) // Skip loop-back interfaces
       continue;
     // only check for the named interface, if specified
@@ -120,7 +132,7 @@ static int mdns_tinysvcmdns_register(char *ap1name, __attribute__((unused)) char
     }
   }
 
-  freeifaddrs(ifa);
+  freeifaddrs(ifalist);
 
   char *txtwithoutmetadata[] = {MDNS_RECORD_WITHOUT_METADATA, NULL};
 #ifdef CONFIG_METADATA
@@ -150,6 +162,14 @@ static int mdns_tinysvcmdns_register(char *ap1name, __attribute__((unused)) char
   struct mdns_service *svc =
       mdnsd_register_svc(svr, ap1name, extendedregtype, port, NULL,
                          (const char **)txt); // TTL should be 75 minutes, i.e. 4500 seconds
+  if (svc == NULL) {
+    warn("tinysvcmdns: service registration failed");
+    free(extendedregtype);
+    mdnsd_stop(svr);
+    svr = NULL;
+    return -1;
+  }
+
   mdns_service_destroy(svc);
 
   free(extendedregtype);

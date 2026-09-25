@@ -65,10 +65,16 @@ static mdns_backend *mdns_backends[] = {
     NULL};
 
 void mdns_register(char **txt_records, char **secondary_txt_records) {
+  if (config.mdns != NULL)
+    mdns_unregister();
+
   if (config.service_name == NULL)
     die("mDNS service name is not configured.");
 
   size_t service_name_length = strlen(config.service_name);
+  if (service_name_length > (SIZE_MAX - 14))
+    die("mDNS service name is too long.");
+
   char *ap1_service_name = malloc(service_name_length + 14);
   if (ap1_service_name == NULL)
     die("Could not allocate mDNS service name buffer.");
