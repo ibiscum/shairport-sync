@@ -376,7 +376,8 @@ static int configure(int32_t requested_encoded_format, char **resulting_channel_
       free(audio_lmb);
     }
 
-    audio_size = data.rate * BUFFER_SIZE_IN_SECONDS * data.bytes_per_sample * data.channels;
+    audio_size =
+        (size_t)data.rate * BUFFER_SIZE_IN_SECONDS * data.bytes_per_sample * data.channels;
     // allocate space for the audio buffer
     audio_lmb = malloc(audio_size);
     if (audio_lmb == NULL)
