@@ -2521,10 +2521,10 @@ static abuf_t *buffer_get_frame(rtsp_conn_info *conn, int resync_requested) {
                         void *silence;
                         if (fs > 0) {
                           silence = malloc(
-                              sps_format_sample_size(
+                              (size_t)sps_format_sample_size(
                                   FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration)) *
                               CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
-                              fs);
+                              (size_t)fs);
                           if (silence == NULL)
                             debug(1, "Failed to allocate %" PRId64 " byte silence buffer.", fs);
                           else {
