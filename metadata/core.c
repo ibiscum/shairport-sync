@@ -151,6 +151,30 @@
 
 int metadata_running = 0;
 
+static int metadata_dup_data_or_log(pc_queue *queue, metadata_package *pack, const char *data,
+                                    uint32_t length) {
+  if ((data == NULL) && (length != 0)) {
+    debug(1,
+          "metadata queue \"%s\": NULL data with non-zero length %u for type %x, code %x. "
+          "Dropping item.",
+          queue->name, length, pack->type, pack->code);
+    return EINVAL;
+  }
+
+  if (data)
+    pack->data = memdup(data, length);
+
+  if ((data != NULL) && (length != 0) && (pack->data == NULL)) {
+    debug(1,
+          "metadata queue \"%s\": failed to duplicate data item: type %x, code %x, "
+          "length %u.",
+          queue->name, pack->type, pack->code, pack->length);
+    return ENOMEM;
+  }
+
+  return 0;
+}
+
 void metadata_pack_cleanup_function(void *arg) {
   // debug(1, "metadata_pack_cleanup_function called");
   metadata_package *pack = (metadata_package *)arg;
@@ -162,6 +186,9 @@ void metadata_pack_cleanup_function(void *arg) {
 }
 
 void metadata_init(void) {
+
+  if (metadata_running)
+    return;
 
 #ifdef CONFIG_METADATA_PIPE
   metadata_pipe_queue_init();
@@ -249,15 +276,9 @@ int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t 
   if (pack.carrier) {
     msg_retain(pack.carrier);
   } else {
-    if (data)
-      pack.data = memdup(data, length); // only if it's not a null
-    if ((data != NULL) && (length != 0) && (pack.data == NULL)) {
-      debug(1,
-            "metadata queue \"%s\": failed to duplicate data item: type %x, code %x, "
-            "length %u.",
-            queue->name, pack.type, pack.code, pack.length);
-      return ENOMEM;
-    }
+    int dup_rc = metadata_dup_data_or_log(queue, &pack, data, length);
+    if (dup_rc != 0)
+      return dup_rc;
   }
 
   // debug(1, "send_metadata_to_queue %x/%x", type, code);

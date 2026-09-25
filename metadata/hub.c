@@ -105,6 +105,22 @@ int string_update(char **str, int *flag, char *s) {
     return string_update_with_size(str, flag, NULL, 0);
 }
 
+static char *metadata_dup_payload_or_log(const char *item_name, const char *data,
+                                         uint32_t length) {
+  if (length == 0)
+    return strdup("");
+
+  if (data == NULL) {
+    debug(1, "MH %s item has NULL payload with non-zero length %u. Ignoring.", item_name, length);
+    return NULL;
+  }
+
+  char *dup = strndup(data, length);
+  if (dup == NULL)
+    debug(1, "MH %s item payload allocation failed for length %u.", item_name, length);
+  return dup;
+}
+
 void metadata_hub_init(void) {
   // debug(1, "Metadata bundle initialisation.");
   memset(&metadata_store, 0, sizeof(metadata_store));
@@ -441,106 +457,107 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
     } break;
     case 'asal':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.album_name, &metadata_store.album_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Album Name", data, length);
+      if (cs && string_update(&metadata_store.album_name, &metadata_store.album_name_changed, cs)) {
         debug(3, "MH Album name set to: \"%s\"", metadata_store.album_name);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'asar':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.artist_name, &metadata_store.artist_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Artist Name", data, length);
+      if (cs && string_update(&metadata_store.artist_name, &metadata_store.artist_name_changed, cs)) {
         debug(3, "MH Artist name set to: \"%s\"", metadata_store.artist_name);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'assl':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.album_artist_name,
-                        &metadata_store.album_artist_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Album Artist Name", data, length);
+      if (cs && string_update(&metadata_store.album_artist_name,
+                              &metadata_store.album_artist_name_changed, cs)) {
         debug(3, "MH Album Artist name set to: \"%s\"", metadata_store.album_artist_name);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'ascm':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.comment, &metadata_store.comment_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Comment", data, length);
+      if (cs && string_update(&metadata_store.comment, &metadata_store.comment_changed, cs)) {
         debug(3, "MH Comment set to: \"%s\"", metadata_store.comment);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'asgn':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.genre, &metadata_store.genre_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Genre", data, length);
+      if (cs && string_update(&metadata_store.genre, &metadata_store.genre_changed, cs)) {
         debug(3, "MH Genre set to: \"%s\"", metadata_store.genre);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'minm':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.track_name, &metadata_store.track_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Track Name", data, length);
+      if (cs && string_update(&metadata_store.track_name, &metadata_store.track_name_changed, cs)) {
         debug(3, "MH Track Name set to: \"%s\"", metadata_store.track_name);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'ascp':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.composer, &metadata_store.composer_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Composer", data, length);
+      if (cs && string_update(&metadata_store.composer, &metadata_store.composer_changed, cs)) {
         debug(3, "MH Composer set to: \"%s\"", metadata_store.composer);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'asdt':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.song_description, &metadata_store.song_description_changed,
-                        cs)) {
+      cs = metadata_dup_payload_or_log("Song Description", data, length);
+      if (cs && string_update(&metadata_store.song_description,
+                              &metadata_store.song_description_changed, cs)) {
         debug(3, "MH Song Description set to: \"%s\"", metadata_store.song_description);
       }
       free(cs);
       break;
     case 'asaa':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.song_album_artist,
-                        &metadata_store.song_album_artist_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Song Album Artist", data, length);
+      if (cs && string_update(&metadata_store.song_album_artist,
+                              &metadata_store.song_album_artist_changed, cs)) {
         debug(3, "MH Song Album Artist set to: \"%s\"", metadata_store.song_album_artist);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'assn':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.sort_name, &metadata_store.sort_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Sort Name", data, length);
+      if (cs && string_update(&metadata_store.sort_name, &metadata_store.sort_name_changed, cs)) {
         debug(3, "MH Sort Name set to: \"%s\"", metadata_store.sort_name);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'assa':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.sort_artist, &metadata_store.sort_artist_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Sort Artist", data, length);
+      if (cs && string_update(&metadata_store.sort_artist, &metadata_store.sort_artist_changed, cs)) {
         debug(3, "MH Sort Artist set to: \"%s\"", metadata_store.sort_artist);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'assu':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.sort_album, &metadata_store.sort_album_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Sort Album", data, length);
+      if (cs && string_update(&metadata_store.sort_album, &metadata_store.sort_album_changed, cs)) {
         debug(3, "MH Sort Album set to: \"%s\"", metadata_store.sort_album);
         metadata_packet_item_changed = 1;
       }
       free(cs);
       break;
     case 'assc':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.sort_composer, &metadata_store.sort_composer_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Sort Composer", data, length);
+      if (cs &&
+          string_update(&metadata_store.sort_composer, &metadata_store.sort_composer_changed, cs)) {
         debug(3, "MH Sort Composer set to: \"%s\"", metadata_store.sort_composer);
         metadata_packet_item_changed = 1;
       }
@@ -616,43 +633,43 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       //      pthread_cleanup_pop(0); // don't remove the lock -- it'll have been done
       break;
     case 'clip':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.client_ip, &metadata_store.client_ip_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Client IP", data, length);
+      if (cs && string_update(&metadata_store.client_ip, &metadata_store.client_ip_changed, cs)) {
         changed = 1;
         debug(3, "MH Client IP set to: \"%s\"", metadata_store.client_ip);
       }
       free(cs);
       break;
     case 'snam':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.client_name, &metadata_store.client_name_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Client Name", data, length);
+      if (cs && string_update(&metadata_store.client_name, &metadata_store.client_name_changed, cs)) {
         changed = 1;
         debug(3, "MH Client Name set to: \"%s\"", metadata_store.client_name);
       }
       free(cs);
       break;
     case 'prgr':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.progress_string, &metadata_store.progress_string_changed,
-                        cs)) {
+      cs = metadata_dup_payload_or_log("Progress String", data, length);
+      if (cs && string_update(&metadata_store.progress_string,
+                              &metadata_store.progress_string_changed, cs)) {
         changed = 1;
         debug(3, "MH Progress String set to: \"%s\"", metadata_store.progress_string);
       }
       free(cs);
       break;
     case 'phbt':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.frame_position_string,
-                        &metadata_store.frame_position_string_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Frame Position String", data, length);
+      if (cs && string_update(&metadata_store.frame_position_string,
+                              &metadata_store.frame_position_string_changed, cs)) {
         changed = 1;
         debug(3, "MH Frame Position String set to: \"%s\"", metadata_store.frame_position_string);
       }
       free(cs);
       break;
     case 'phb0':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.first_frame_position_string,
-                        &metadata_store.first_frame_position_string_changed, cs)) {
+      cs = metadata_dup_payload_or_log("First Frame Position String", data, length);
+      if (cs && string_update(&metadata_store.first_frame_position_string,
+                              &metadata_store.first_frame_position_string_changed, cs)) {
         changed = 1;
         debug(3, "MH First Frame Position String set to: \"%s\"",
               metadata_store.first_frame_position_string);
@@ -660,32 +677,34 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       free(cs);
       break;
     case 'styp':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.stream_type, &metadata_store.stream_type_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Stream Type", data, length);
+      if (cs && string_update(&metadata_store.stream_type, &metadata_store.stream_type_changed, cs)) {
         changed = 1;
         debug(3, "MH Stream Type set to: \"%s\"", metadata_store.stream_type);
       }
       free(cs);
       break;
     case 'sdsc':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.source_format, &metadata_store.source_format_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Source Format", data, length);
+      if (cs &&
+          string_update(&metadata_store.source_format, &metadata_store.source_format_changed, cs)) {
         changed = 1;
         debug(3, "MH Source Format set to: \"%s\"", metadata_store.source_format);
       }
       free(cs);
       break;
     case 'odsc':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.output_format, &metadata_store.output_format_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Output Format", data, length);
+      if (cs &&
+          string_update(&metadata_store.output_format, &metadata_store.output_format_changed, cs)) {
         changed = 1;
         debug(3, "MH Output Format set to: \"%s\"", metadata_store.output_format);
       }
       free(cs);
       break;
     case 'svip':
-      cs = strndup(data, length);
-      if (string_update(&metadata_store.server_ip, &metadata_store.server_ip_changed, cs)) {
+      cs = metadata_dup_payload_or_log("Server IP", data, length);
+      if (cs && string_update(&metadata_store.server_ip, &metadata_store.server_ip_changed, cs)) {
         changed = 1;
         debug(3, "MH Server IP set to: \"%s\"", metadata_store.server_ip);
       }
@@ -750,7 +769,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       codestring[4] = 0;
       char *payload;
       if (length < 2048)
-        payload = strndup(data, length);
+        payload = metadata_dup_payload_or_log("Unhandled metadata payload", data, length);
       else
         payload = NULL;
       // debug(1, "MH \"%s\" \"%s\" (%d bytes): \"%s\".", typestring, codestring, length, payload);

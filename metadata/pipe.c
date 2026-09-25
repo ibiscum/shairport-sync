@@ -40,6 +40,11 @@ void metadata_open(void) {
   if (config.metadata_enabled == 0)
     return;
 
+  if ((config.metadata_pipename == NULL) || (config.metadata_pipename[0] == '\0')) {
+    debug(1, "metadata pipe name is not set; metadata pipe output disabled.");
+    return;
+  }
+
   size_t pl = strlen(config.metadata_pipename) + 1;
 
   char *path = malloc(pl + 1);
@@ -155,6 +160,11 @@ void *metadata_thread_function(__attribute__((unused)) void *ignore) {
 }
 
 void metadata_pipe_queue_init() {
+  if ((config.metadata_pipename == NULL) || (config.metadata_pipename[0] == '\0')) {
+    warn("metadata pipe name is not set; metadata pipe queue will not start.");
+    return;
+  }
+
   // create the metadata pipe, if necessary
   size_t pl = strlen(config.metadata_pipename) + 1;
   char *path = malloc(pl + 1);
