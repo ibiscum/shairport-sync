@@ -601,8 +601,11 @@ static int play(void *buf, int samples, __attribute__((unused)) int sample_type,
 
   pa_sps_t *format_info =
       sps_format_lookup(FORMAT_FROM_ENCODED_FORMAT(current_encoded_output_format));
-  size_t bytes_to_transfer = samples * format_info->bytes_per_sample *
-                             CHANNELS_FROM_ENCODED_FORMAT(current_encoded_output_format);
+  size_t bytes_to_transfer = 0;
+  if (samples > 0) {
+    bytes_to_transfer = (size_t)samples * format_info->bytes_per_sample *
+                        CHANNELS_FROM_ENCODED_FORMAT(current_encoded_output_format);
+  }
 
   pthread_mutex_lock(&buffer_mutex);
   size_t bytes_available = audio_size - audio_occupancy;
