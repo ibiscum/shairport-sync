@@ -127,7 +127,7 @@ static void on_process(void *userdata) {
       // note: the requested field is the number of frames, not bytes, requested
       int max_possible_frames = SPA_MIN(b->requested, buf->datas[0].maxsize / stride);
 
-      size_t bytes_we_can_transfer = max_possible_frames * stride;
+      size_t bytes_we_can_transfer = (size_t)max_possible_frames * (size_t)stride;
 
       if (audio_occupancy > 0) {
         // if (enable_fill == 1)) {
