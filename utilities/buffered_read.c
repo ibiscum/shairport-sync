@@ -122,6 +122,8 @@ void *buffered_tcp_reader(void *arg) {
     if (pthread_cond_signal(&descriptor->not_empty_cv))
       debug(1, "Error signalling after accept failure");
     pthread_cleanup_pop(1); // release the mutex
+    pthread_cleanup_pop(1); // cleanup
+    pthread_exit(NULL);
   }
   // debug(1, "buffered_tcp_reader: the client has opened a buffered audio link.");
   // intptr_t pfd = fd;

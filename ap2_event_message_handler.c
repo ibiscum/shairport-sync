@@ -46,7 +46,7 @@ ssize_t ap2_event_port_send_message(rtsp_conn_info *conn, char *data, size_t dat
   ssize_t result = -1; // assume a problem
   pthread_mutex_lock(&conn->event_sender_mutex);
   pthread_cleanup_push(mutex_unlock, &conn->event_sender_mutex);
-  if (conn->event_channel_fd > 0) {
+  if (conn->event_channel_fd >= 0) {
     result = write_encrypted(conn->event_channel_fd, &conn->ap2_pairing_context.event_cipher_bundle,
                              data, data_length);
     if ((result != -1) && ((size_t)result == data_length)) {
