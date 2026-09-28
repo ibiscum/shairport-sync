@@ -74,8 +74,9 @@ int _safe_socket_close(const char *filename, const int linenumber, int *sockfd) 
   if (*sockfd >= 0) {
     int fd_to_close = *sockfd;
     _debug(filename, linenumber, 4, "_safe_socket_close: closing socket %d.", fd_to_close);
-    *sockfd = -1;
     result = close(fd_to_close);
+    if (result == 0)
+      *sockfd = -1;
   } else {
     _debug(filename, linenumber, 1, "_safe_socket_close: socket already closed!");
   }
