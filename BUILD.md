@@ -100,7 +100,7 @@ Only if that looks okay, proceed to:
 ```
 
 ### Fedora (Fedora 40)
-Important: to get the correct version of FFmpeg, _before you install the libraries_, please ensure the you have [enabled](https://docs.fedoraproject.org/en-US/quick-docs/rpmfusion-setup) RPM Fusion software repositories to the "Nonfree" level. If this is not done, the FFmpeg libraries will lack a suitable AAC decoder, preventing Shairport Sync from working in AirPlay 2 mode. 
+Important: to get the correct version of FFmpeg, _before you install the libraries_, please ensure you have [enabled](https://docs.fedoraproject.org/en-US/quick-docs/rpmfusion-setup) RPM Fusion software repositories to the "Nonfree" level. If this is not done, the FFmpeg libraries will lack a suitable AAC decoder, preventing Shairport Sync from working in AirPlay 2 mode. 
 ```
 # yum update
 # yum install --allowerasing make automake gcc gcc-c++ \
@@ -183,7 +183,7 @@ Download Shairport Sync and configure, compile and install it. Before executing 
   * If you omit the `--sysconfdir=/etc` entry, `/usr/local/etc` will be used as the `sysconfdir`, which is conventionally used in FreeBSD.
 * **Classic Shairport Sync:** For classic Shairport Sync, replace `--with-airplay-2` with `--with-ffmpeg`.
   * You can actually omit `--with-ffmpeg` when building classic Shairport Sync, but it is not recommended. While you'll save space (you can omit the FFMpeg libraries in the build and run-time environments), transcoding, e.g. from 44,100 to 48,000 frames per second, will not be available and less well-maintained and less secure decoders will be used.
-* **Extra Features:** If you wish to add extra features, for example an extra audio backend, take a look at the [configuration flags](CONFIGURATION%20FLAGS.md). For this walkthrough, though, please do not change too much!
+* **Extra Features:** If you wish to add extra features, for example an extra audio backend, take a look at the [configuration flags](CONFIGURATION FLAGS.md). For this walkthrough, though, please do not change too much!
 
 If you are building Shairport Sync for the first time, clone its git repository and move into it:
 ```
@@ -205,13 +205,13 @@ $ make # just over 7 minutes on a Raspberry Pi B
 # make install
 ```
 ## 4. Test
-At this point, Shairport Sync should be built and installed but not running. Now you can test it out from the command line. Before you start testing, though, if you have built Shairport Sync for AirPlay 2 operation, ensure `NQPTP` is running. 
+At this point, Shairport Sync should be built and installed but not running. Now you can test it out from the command-line. Before you start testing, though, if you have built Shairport Sync for AirPlay 2 operation, ensure `NQPTP` is running. 
 
 To check the installation, enter:
 ```
 $ shairport-sync
 ```
-* Add the `-v` command line option to get some diagnostics. 
+* Add the `-v` command-line option to get some diagnostics. 
 * Add the `--statistics` option to get some infomation about the audio received.
 
 
@@ -440,4 +440,4 @@ At this point, you should have a basic functioning Shairport Sync installation. 
 #### Configuration Sample File
 When you run `# make install`, a configuration file is installed if one doesn't already exist. Additionally, a sample configuration file called `shairport-sync.conf.sample` is _always_ installed. This contains all the setting groups and all the settings available, commented out so that default values are used. The file contains explanations of the settings, useful hints and suggestions. The configuration file and the sample configuration file are installed in the `sysconfdir` you specified at the `./configure...` step above.
 
-Please take a look at [Advanced Topics](ADVANCED%20TOPICS/README.md) for some ideas about what else you can do to enhance the operation of Shairport Sync. For example, you can adjust synchronisation to compensate for delays in your system.
+Please take a look at [Advanced Topics](documents/Advanced Topics/README.md) for some ideas about what else you can do to enhance the operation of Shairport Sync. For example, you can adjust synchronization to compensate for delays in your system.

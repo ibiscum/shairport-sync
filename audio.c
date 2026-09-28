@@ -100,8 +100,13 @@ audio_output *audio_get_output(const char *name) {
   audio_output **out;
 
   // default to the first
-  if (!name)
+  if (!name) {
+    if (outputs[0] == NULL) {
+      warn("No audio backends are available in this build.");
+      return NULL;
+    }
     return outputs[0];
+  }
 
   for (out = outputs; *out; out++)
     if (!strcasecmp(name, (*out)->name))
@@ -211,7 +216,7 @@ void parse_audio_options(const char *named_stanza, uint32_t default_format_set,
                "It remains set to \"auto\". Note: numbers should not be placed in quotes.",
                str);
         else
-          warn("Invalid output rate \"%s\". It should be \"auto\" or the lead-in time in seconds. "
+          warn("Invalid audio_backend_silent_lead_in_time \"%s\". It should be \"auto\" or the lead-in time in seconds. "
                "It remains set to %f. Note: numbers should not be placed in quotes.",
                str, config.audio_backend_silent_lead_in_time);
       }
@@ -266,7 +271,7 @@ uint32_t get_format_settings(const char *stanza_name, const char *setting_name) 
         int i;
         for (i = 0; i < format_settings_count; i++) {
           debug(3, "format setting %u: \"%s\".", i, format_settings[i]);
-          if (strcmp(format_settings[i], "auto") == 0) {
+          if (strcasecmp(format_settings[i], "auto") == 0) {
             if (format_settings_count != 1)
               warn("in the \"%s\" setting in the \"%s\" section of the configuration file, "
                    "multiple formats, including \"auto\", "
@@ -342,7 +347,7 @@ uint32_t get_rate_settings(const char *stanza_name, const char *setting_name) {
     if (rate_setting != NULL) {
       if (config_setting_type(rate_setting) == CONFIG_TYPE_STRING) {
         // see if it is "auto"
-        if (strcmp(config_setting_get_string(rate_setting), "auto") == 0) {
+        if (strcasecmp(config_setting_get_string(rate_setting), "auto") == 0) {
 #ifdef CONFIG_FFMPEG
           rate_set = SPS_RATE_SET; // all valid rates
 #else
@@ -437,7 +442,7 @@ uint32_t get_channel_settings(const char *stanza_name, const char *setting_name)
     if (channels_setting != NULL) {
       if (config_setting_type(channels_setting) == CONFIG_TYPE_STRING) {
         // see if it is "auto"
-        if (strcmp(config_setting_get_string(channels_setting), "auto") == 0) {
+        if (strcasecmp(config_setting_get_string(channels_setting), "auto") == 0) {
 #ifdef CONFIG_FFMPEG
           channel_set = SPS_CHANNEL_SET; // all valid channels
 #else

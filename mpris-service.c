@@ -29,6 +29,8 @@
 
 #include "config.h"
 
+#ifdef CONFIG_MPRIS_INTERFACE
+
 #include "common.h"
 #include "player.h"
 #include "rtsp.h"
@@ -40,11 +42,13 @@
 #endif
 
 #include "metadata/hub.h"
+#include "mpris-interface.h"
 #include "mpris-service.h"
 #include "utilities/exit.h"
 
 static guint ownerID = 0;
 static GBusType mpris_bus_type = G_BUS_TYPE_SYSTEM; // default is the dbus system message bus
+static int mpris_shutting_down = 0;
 
 MediaPlayer2 *mprisPlayerSkeleton;
 MediaPlayer2Player *mprisPlayerPlayerSkeleton;
@@ -69,6 +73,9 @@ double mpris_volume_to_airplay_volume(double sp) {
 
 void mpris_metadata_watcher(struct metadata_bundle *argc, __attribute__((unused)) void *userdata) {
   // debug(1, "MPRIS metadata watcher called");
+  if ((argc == NULL) || (mprisPlayerPlayerSkeleton == NULL))
+    return;
+
   char response[100];
   media_player2_player_set_volume(mprisPlayerPlayerSkeleton,
                                   airplay_volume_to_mpris_volume(argc->airplay_volume));
@@ -305,7 +312,7 @@ static gboolean on_handle_set_volume(MediaPlayer2Player *skeleton,
   snprintf(command, sizeof(command), "setproperty?dmcp.device-volume=%.6f", ap_volume);
   send_simple_dacp_command(command);
 #endif
-  media_player2_player_complete_play(skeleton, invocation);
+  g_dbus_method_invocation_return_value(invocation, NULL);
   return TRUE;
 }
 
@@ -316,6 +323,7 @@ static void on_mpris_name_acquired(GDBusConnection *connection, const gchar *nam
 
   debug(2, "MPRIS well-known interface name \"%s\" acquired on the %s bus.", name,
         (mpris_bus_type == G_BUS_TYPE_SESSION) ? "session" : "system");
+    mpris_shutting_down = 0;
   mprisPlayerSkeleton = media_player2_skeleton_new();
   mprisPlayerPlayerSkeleton = media_player2_player_skeleton_new();
 
@@ -364,12 +372,27 @@ static void on_mpris_name_acquired(GDBusConnection *connection, const gchar *nam
 
 static void on_mpris_name_lost(__attribute__((unused)) GDBusConnection *connection,
                                const gchar *name, __attribute__((unused)) gpointer user_data) {
-  warn("could not acquire an MPRIS interface named \"%s\" on the %s bus.", name,
-       (mpris_bus_type == G_BUS_TYPE_SESSION) ? "session" : "system");
+  if (mpris_shutting_down == 0) {
+    warn("could not acquire an MPRIS interface named \"%s\" on the %s bus.", name,
+         (mpris_bus_type == G_BUS_TYPE_SESSION) ? "session" : "system");
+  } else {
+    debug(2, "MPRIS interface \"%s\" released on the %s bus.", name,
+          (mpris_bus_type == G_BUS_TYPE_SESSION) ? "session" : "system");
+  }
+
+  mprisPlayerSkeleton = NULL;
+  mprisPlayerPlayerSkeleton = NULL;
   ownerID = 0;
 }
 
 int start_mpris_service() {
+  if (ownerID) {
+    debug(2, "MPRIS service already running -- replacing existing ownerID %u.", ownerID);
+    g_bus_unown_name(ownerID);
+    ownerID = 0;
+  }
+
+  mpris_shutting_down = 0;
   mprisPlayerSkeleton = NULL;
   mprisPlayerPlayerSkeleton = NULL;
 
@@ -393,8 +416,20 @@ int start_mpris_service() {
 }
 
 void stop_mpris_service() {
+  mpris_shutting_down = 1;
   if (ownerID) {
     debug(2, "stopping MPRIS service -- unowning ownerID %d.", ownerID);
     g_bus_unown_name(ownerID);
+    ownerID = 0;
   }
+  mprisPlayerSkeleton = NULL;
+  mprisPlayerPlayerSkeleton = NULL;
 }
+
+#else
+
+int start_mpris_service() { return 0; }
+
+void stop_mpris_service(void) {}
+
+#endif

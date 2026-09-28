@@ -30,7 +30,7 @@
 #include "generate_random_uuid.h"
 
 // user is responsible for deallocating returned string
-char *generate_random_uuid() {
+char *generate_random_uuid(void) {
   // generate a UUID
   // from https://stackoverflow.com/questions/51053568/generating-a-random-uuid-in-c
   // with thanks
@@ -38,6 +38,9 @@ char *generate_random_uuid() {
   uuid_generate_random(binuuid);
 
   char *uuid = malloc(UUID_STR_LEN + 1); // leave space for the NUL at the end
+  if (uuid == NULL)
+    return NULL;
+
   // Produces a UUID string at uuid consisting of lower-case letters
   uuid_unparse_lower(binuuid, uuid);
   return uuid;

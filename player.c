@@ -2521,10 +2521,10 @@ static abuf_t *buffer_get_frame(rtsp_conn_info *conn, int resync_requested) {
                         void *silence;
                         if (fs > 0) {
                           silence = malloc(
-                              sps_format_sample_size(
+                              (size_t)sps_format_sample_size(
                                   FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration)) *
                               CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
-                              fs);
+                              (size_t)fs);
                           if (silence == NULL)
                             debug(1, "Failed to allocate %" PRId64 " byte silence buffer.", fs);
                           else {
@@ -2580,9 +2580,10 @@ static abuf_t *buffer_get_frame(rtsp_conn_info *conn, int resync_requested) {
                       fs = frame_gap;
 
                     silence = malloc(
-                        sps_format_sample_size(
+                        (size_t)sps_format_sample_size(
                             FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration)) *
-                        CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) * fs);
+                        CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
+                        (size_t)fs);
                     if (silence == NULL)
                       debug(1, "Failed to allocate %" PRId64 " frame silence buffer.", fs);
                     else {
@@ -3792,7 +3793,7 @@ void *player_thread_func(void *arg) {
               die("Failed to allocate memory for the transition buffer.");
             // size change
             conn->outbuf =
-                malloc(sps_format_sample_size(
+                malloc((size_t)sps_format_sample_size(
                            FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration)) *
                        CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
                        ((inframe->length) * conn->output_sample_ratio + INTERPOLATION_LIMIT));
@@ -4403,9 +4404,10 @@ void *player_thread_func(void *arg) {
                     skipping_frames_at_start_of_play = 0;
                     int64_t gap = -gap_to_fix;
                     void *silence = malloc(
-                        sps_format_sample_size(
+                        (size_t)sps_format_sample_size(
                             FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration)) *
-                        CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) * gap);
+                        CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
+                        (size_t)gap);
                     if (silence == NULL) {
                       debug(1, "Failed to allocate memory for a silent gap.");
                     } else {
@@ -4808,7 +4810,7 @@ void *player_thread_func(void *arg) {
                       } else {
 
                         size_t bytes_to_skip =
-                            frames_to_skip *
+                            (size_t)frames_to_skip *
                             CHANNELS_FROM_ENCODED_FORMAT(config.current_output_configuration) *
                             sps_format_sample_size(
                                 FORMAT_FROM_ENCODED_FORMAT(config.current_output_configuration));

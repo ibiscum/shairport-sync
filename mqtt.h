@@ -1,7 +1,13 @@
 #ifndef MQTT_H
 #define MQTT_H
-#include <mosquitto.h>
 #include <stdint.h>
+
+#ifdef CONFIG_MQTT
+#include <mosquitto.h>
+#else
+struct mosquitto;
+struct mosquitto_message;
+#endif
 
 int initialise_mqtt();
 void mqtt_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t length);

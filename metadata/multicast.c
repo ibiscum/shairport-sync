@@ -20,6 +20,8 @@ pc_queue metadata_multicast_queue;
 metadata_package metadata_multicast_queue_items[metadata_multicast_queue_size];
 pthread_t metadata_multicast_thread;
 
+void metadata_delete_multicast_socket(void);
+
 int send_metadata_to_multicast_queue(const uint32_t type, const uint32_t code, const char *data,
                                      const uint32_t length, rtsp_message *carrier, int block) {
   return send_metadata_to_queue(&metadata_multicast_queue, type, code, data, length, carrier,

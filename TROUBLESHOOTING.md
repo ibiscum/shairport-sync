@@ -16,7 +16,7 @@ If you are using the default ALSA backend, don't forget to check two simple thin
 You can use `alsamixer` for both of these checks. A muted output has the letter(s) `M` as its value. Select it and type `M` again to unmute. 
 
 ### Sync is slightly off!
-Please see [Adjusting Sync](./ADVANCED%20TOPICS/AdjustingSync.md).
+Please see [Adjusting Sync](documents/Advanced Topics/AdjustingSync.md).
 
 ### WiFi adapter running in power-saving / low-power mode
 
@@ -84,7 +84,7 @@ An iOS device that is being used as a WiFi hotspot can not play audio to another
 You can play from other devices but not from your Windows PC.
 
 **Possible Issue -- AirPlay 2**
-iTunes on Windows is not compatible with Shairport Sync when it is built for AirPlay 2. This is unlikely to change, unfortunately. However, iTunes on Windows remains compatible with "classical" Shairport Sync.
+iTunes on Windows is not compatible with Shairport Sync when it is built for AirPlay 2. This is unlikely to change, unfortunately. However, iTunes on Windows remains compatible with "classic" Shairport Sync.
 
 **Possible Issue -- AirPlay**
 The Windows Firewall is preventing access to Shairport Sync.
@@ -198,7 +198,7 @@ When using a USB DAC on a Raspberry Pi audio plays fine through other methods (s
 **Possible Cause**
 There is a suspicion (although this is not 100% confirmed) that this is a fun latency/timing issue related to a combination of
 - The Raspberry Pi's ethernet itself being a USB device resulting in shared bandwidth/interrupts with USB DACs
-- Shairport Sync continually checking the latency of the USB DAC to maintain synchronisation of audio
+- Shairport Sync continually checking the latency of the USB DAC to maintain synchronization of audio
 - Quirky USB DACs (already known to be problematic on the Raspberry Pi more info available [here](https://www.raspberrypi.org/documentation/hardware/raspberrypi/usb/README.md#knownissues)
 For more discussion on this issue see [issue 167](https://github.com/mikebrady/shairport-sync/issues/167) or read on for the quick fix!
 

@@ -44,6 +44,12 @@ static unsigned char http_header_state[] = {
 int http_parse_header_char(int* state, char ch)
 {
     int newstate, code = 0;
+
+    if (*state < 0 || *state > 10) {
+        *state = 1;
+        return http_header_status_done;
+    }
+
     switch (ch) {
     case '\t': code = 1; break;
     case '\n': code = 2; break;

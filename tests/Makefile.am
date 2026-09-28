@@ -13,7 +13,8 @@ check_PROGRAMS = \
 	test_mdns_minimal \
 	test_player_common_regression \
 	test_player_common_unit \
-	test_rtp_minimal
+	test_rtp_minimal \
+	test_tinyhttp_parser_regression
 TESTS = $(check_PROGRAMS)
 
 # Keep warnings consistent with the main build and add cmocka flags/libs.
@@ -99,3 +100,12 @@ test_rtp_minimal_SOURCES = \
 	$(top_srcdir)/rtp.c
 test_rtp_minimal_LDFLAGS = -pthread
 test_rtp_minimal_LDADD = $(CMOCKA_LIBS)
+
+test_tinyhttp_parser_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_tinyhttp_parser_regression_SOURCES = \
+	test_tinyhttp_parser_regression.c \
+	$(top_srcdir)/tinyhttp/http.c \
+	$(top_srcdir)/tinyhttp/header.c \
+	$(top_srcdir)/tinyhttp/chunk.c
+test_tinyhttp_parser_regression_LDFLAGS = -pthread
+test_tinyhttp_parser_regression_LDADD = $(CMOCKA_LIBS)

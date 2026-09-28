@@ -1,6 +1,9 @@
 #ifndef _STRUCTURED_BUFFER_H
 #define _STRUCTURED_BUFFER_H
 
+#include <stddef.h>
+#include <stdint.h>
+
 typedef struct {
   char *buf;
   size_t buf_size;

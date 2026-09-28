@@ -33,13 +33,21 @@
 
 // user is responsible for deallocating returned string
 char *generate_device_uuid(const char *device_id) {
+  if (device_id == NULL)
+    return NULL;
+
   uuid_t namespace_uuid;
   uuid_t derived_uuid;
 
-  uuid_parse(SHAIRPORT_SYNC_DEVICE_NAMESPACE, namespace_uuid);
+  if (uuid_parse(SHAIRPORT_SYNC_DEVICE_NAMESPACE, namespace_uuid) != 0)
+    return NULL;
+
   uuid_generate_sha1(derived_uuid, namespace_uuid, device_id, strlen(device_id));
 
   char *uuid = malloc(UUID_STR_LEN + 1);
+  if (uuid == NULL)
+    return NULL;
+
   uuid_unparse_lower(derived_uuid, uuid);
   return uuid;
 }

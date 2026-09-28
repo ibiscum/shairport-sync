@@ -253,7 +253,7 @@ uint8_t *create_nlabel(const char *name) {
 static uint8_t *copy_label(uint8_t *pkt_buf, size_t pkt_len, size_t off) {
   int len;
 
-  if (off > pkt_len)
+  if (off >= pkt_len)
     return NULL;
 
   len = pkt_buf[off] + 1;
@@ -277,23 +277,43 @@ static uint8_t *uncompress_nlabel(uint8_t *pkt_buf, size_t pkt_len, size_t off) 
 
   // calculate length of uncompressed label
   size_t hops = 0;
-  for (p = pkt_buf + off; *p && p < e; p++) {
+  for (p = pkt_buf + off; (p < e) && *p;) {
     // A compression pointer that points forward or into a cycle can make this
     // loop run forever. Bound the number of steps to the packet size, which no
     // legitimate name can exceed.
     if (++hops > pkt_len)
       return NULL;
+
     size_t llen = 0;
     if ((*p & 0xC0) == 0xC0) {
-      uint8_t *p2 = pkt_buf + (((p[0] & ~0xC0) << 8) | p[1]);
+      if ((size_t)(e - p) < 2)
+        return NULL;
+
+      size_t ptr_off = ((size_t)(p[0] & ~0xC0) << 8) | p[1];
+      if (ptr_off >= pkt_len)
+        return NULL;
+
+      uint8_t *p2 = pkt_buf + ptr_off;
+      if ((p2 >= e) || (*p2 > 63) || ((size_t)(e - p2) < ((size_t)*p2 + 1)))
+        return NULL;
+
       llen = *p2 + 1;
-      p = p2 + llen - 1;
+      p = p2 + llen;
     } else {
+      if (*p > 63)
+        return NULL;
+
       llen = *p + 1;
-      p += llen - 1;
+      if ((size_t)(e - p) < llen)
+        return NULL;
+
+      p += llen;
     }
     len += llen;
   }
+
+  if (p >= e)
+    return NULL;
 
   str = sp = malloc(len + 1);
   if (str == NULL)
@@ -301,24 +321,57 @@ static uint8_t *uncompress_nlabel(uint8_t *pkt_buf, size_t pkt_len, size_t off) 
 
   // FIXME: must merge this with above code
   hops = 0;
-  for (p = pkt_buf + off; *p && p < e; p++) {
+  for (p = pkt_buf + off; (p < e) && *p;) {
     if (++hops > pkt_len) {
       free(str);
       return NULL;
     }
+
     size_t llen = 0;
     if ((*p & 0xC0) == 0xC0) {
-      uint8_t *p2 = pkt_buf + (((p[0] & ~0xC0) << 8) | p[1]);
+      if ((size_t)(e - p) < 2) {
+        free(str);
+        return NULL;
+      }
+
+      size_t ptr_off = ((size_t)(p[0] & ~0xC0) << 8) | p[1];
+      if (ptr_off >= pkt_len) {
+        free(str);
+        return NULL;
+      }
+
+      uint8_t *p2 = pkt_buf + ptr_off;
+      if ((p2 >= e) || (*p2 > 63) || ((size_t)(e - p2) < ((size_t)*p2 + 1))) {
+        free(str);
+        return NULL;
+      }
+
       llen = *p2 + 1;
-      strncpy(sp, (char *)p2, llen);
-      p = p2 + llen - 1;
+      memcpy(sp, p2, llen);
+      p = p2 + llen;
     } else {
+      if (*p > 63) {
+        free(str);
+        return NULL;
+      }
+
       llen = *p + 1;
-      strncpy(sp, (char *)p, llen);
-      p += llen - 1;
+      if ((size_t)(e - p) < llen) {
+        free(str);
+        return NULL;
+      }
+
+      memcpy(sp, p, llen);
+      p += llen;
     }
     sp += llen;
   }
+
+  if (p >= e) {
+    free(str);
+    return NULL;
+  }
+
   *sp = '\0';
 
   return (uint8_t *)str;
@@ -758,8 +811,19 @@ static size_t mdns_parse_rr(uint8_t *pkt_buf, size_t pkt_len, size_t off, struct
     goto err;
 
   // parse the MDNS RR section
-  p += label_len(pkt_buf, pkt_len, off);
+  size_t name_len = label_len(pkt_buf, pkt_len, off);
+  if ((name_len == 0) || ((size_t)(e - p) < name_len)) {
+    free(name);
+    goto err;
+  }
+
+  p += name_len;
   rr->name = name;
+
+  if ((size_t)(e - p) < (sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t))) {
+    rr_entry_destroy(rr);
+    return 0;
+  }
 
   rr->type = mdns_read_u16(p);
   p += sizeof(uint16_t);
@@ -775,7 +839,7 @@ static size_t mdns_parse_rr(uint8_t *pkt_buf, size_t pkt_len, size_t off, struct
   rr_data_len = mdns_read_u16(p);
   p += sizeof(uint16_t);
 
-  if (p + rr_data_len > e) {
+  if (rr_data_len > (size_t)(e - p)) {
     DEBUG_PRINTF("rr_data_len goes beyond packet buffer: %lu > %lu\n", rr_data_len, e - p);
     rr_entry_destroy(rr);
     return 0;
@@ -802,6 +866,10 @@ static size_t mdns_parse_rr(uint8_t *pkt_buf, size_t pkt_len, size_t off, struct
       break;
     }
     rr->data.AAAA.addr = malloc(sizeof(struct in6_addr));
+    if (rr->data.AAAA.addr == NULL) {
+      parse_error = 1;
+      break;
+    }
     unsigned int i;
     for (i = 0; i < sizeof(struct in6_addr); i++)
       rr->data.AAAA.addr->s6_addr[i] = p[i];
@@ -1740,6 +1808,8 @@ struct mdnsd *mdnsd_start() {
   server->sockfd = create_recv_sock();
   if (server->sockfd < 0) {
     log_message(LOG_ERR, "unable to create recv socket");
+    close_pipe(&server->notify_pipe[0]);
+    close_pipe(&server->notify_pipe[1]);
     free(server);
     return NULL;
   }
@@ -1753,6 +1823,9 @@ struct mdnsd *mdnsd_start() {
   if (named_pthread_create(&tid, &attr, (void *(*)(void *)) & main_loop, (void *)server,
                            "tinysvcmdns") != 0) {
     pthread_mutex_destroy(&server->data_lock);
+    close_pipe(&server->sockfd);
+    close_pipe(&server->notify_pipe[0]);
+    close_pipe(&server->notify_pipe[1]);
     free(server);
     return NULL;
   }

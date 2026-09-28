@@ -24,6 +24,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <limits.h>
+
 static const unsigned char http_chunk_state[] = {
 /*     *    LF    CR    HEX */
     0xC1, 0xC1, 0xC1,    1, /* s0: initial hex char */
@@ -36,6 +38,12 @@ static const unsigned char http_chunk_state[] = {
 int http_parse_chunked(int* state, int *size, char ch)
 {
     int newstate, code = 0;
+
+    if (*state < 0 || *state > 4) {
+        *size = -1;
+        return 0;
+    }
+
     switch (ch) {
     case '\n': code = 1; break;
     case '\r': code = 2; break;
@@ -62,12 +70,27 @@ int http_parse_chunked(int* state, int *size, char ch)
         *size = 0;
         /* fallthrough */
     case 0x81: /* size char */
-        if (ch >= 'a')
-            *size = *size * 16 + (ch - 'a' + 10);
-        else if (ch >= 'A')
-            *size = *size * 16 + (ch - 'A' + 10);
-        else
-            *size = *size * 16 + (ch - '0');
+        if (*size > (INT_MAX / 16)) {
+            *size = -1;
+            return 0;
+        }
+
+        {
+            int digit;
+            if (ch >= 'a')
+                digit = (ch - 'a' + 10);
+            else if (ch >= 'A')
+                digit = (ch - 'A' + 10);
+            else
+                digit = (ch - '0');
+
+            if (*size > ((INT_MAX - digit) / 16)) {
+                *size = -1;
+                return 0;
+            }
+
+            *size = *size * 16 + digit;
+        }
         break;
 
     case 0x83:

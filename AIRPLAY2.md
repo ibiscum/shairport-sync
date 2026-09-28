@@ -58,7 +58,7 @@ Shairport Sync offers AirPlay 2 support for audio sources on:
 
 ## General
 Shairport Sync uses a companion application called [NQPTP](https://github.com/mikebrady/nqptp) ("Not Quite PTP")
-for timing and synchronisation in AirPlay 2. NQPTP must have exclusive access to ports `319` and `320`.
+for timing and synchronization in AirPlay 2. NQPTP must have exclusive access to ports `319` and `320`.
 
 ## What You Need
 For AirPlay 2, a system with the power of a Raspberry Pi B, or better, is recommended.

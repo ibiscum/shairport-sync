@@ -29,7 +29,7 @@
 
 #define MOD_23BIT 0x7FFFFF // 2^23 - 1
 
-// Assumes 'a' and 'b' are within 2^22 of each other
+// Contract: intended for use when a and b are within 2^22 of each other.
 int32_t a_minus_b_mod23(uint32_t a, uint32_t b) {
 
   // Mask to 23 bits

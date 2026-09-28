@@ -6,7 +6,10 @@ on:
     branches: [ "development" ]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    
+
+permissions:
+  contents: read
+
 jobs:
   build:
 
@@ -33,4 +36,3 @@ jobs:
     - name: Terminate
       run: |
         sudo /etc/init.d/shairport-sync stop
-

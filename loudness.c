@@ -2,6 +2,10 @@
 #include "common.h"
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define MAXCHANNELS 8
 
 // loudness_processor_dynamic loudness_r;
@@ -18,6 +22,9 @@ static float loudness_volume_reference_parameter = 0.0;
 static loudness_processor_static lps = {0.0, 0.0, 0.0, 0.0, 0.0};
 
 void _loudness_set_volume(loudness_processor_static *p, float volume, unsigned int sample_rate) {
+  if (p == NULL)
+    return;
+
   float gain = -(volume - config.loudness_reference_volume_db) * 0.5;
   if (gain < 0) {
     gain = 0;
@@ -29,6 +36,15 @@ void _loudness_set_volume(loudness_processor_static *p, float volume, unsigned i
 
   // Formula from http://www.earlevel.com/main/2011/01/02/biquad-formulas/
   float Fs = sample_rate * 1.0;
+  if (Fs <= (2.0f * Fc)) {
+    // For invalid or too-low sample rates, bypass the filter safely.
+    p->a0 = 1.0;
+    p->a1 = 0.0;
+    p->a2 = 0.0;
+    p->b1 = 0.0;
+    p->b2 = 0.0;
+    return;
+  }
 
   float K = tan(M_PI * Fc / Fs);
   float V = pow(10.0, gain / 20.0);
@@ -54,9 +70,13 @@ float loudness_process(loudness_processor_dynamic *p, float i0) {
 }
 
 void loudness_update(rtsp_conn_info *conn) {
+  if (conn == NULL)
+    return;
+
   // first, see if loudness can be enabled
   int do_loudness = config.loudness_enabled;
-  if ((config.output->parameters != NULL) && (config.output->parameters()->volume_range != NULL)) {
+  if ((config.output != NULL) && (config.output->parameters != NULL) &&
+      (config.output->parameters()->volume_range != NULL)) {
     do_loudness = 0; // if we are using external (usually hardware) volume controls.
   }
 
@@ -66,7 +86,10 @@ void loudness_update(rtsp_conn_info *conn) {
         (conn->input_rate != loudness_rate_parameter) ||
         (config.loudness_reference_volume_db != loudness_volume_reference_parameter)) {
       debug(1, "update loudness parameters");
-      float new_volume = 20 * log10((double)conn->fix_volume / 65536);
+      double fix_volume = conn->fix_volume;
+      if (fix_volume <= 0.0)
+        fix_volume = 1.0;
+      float new_volume = 20 * log10(fix_volume / 65536.0);
       _loudness_set_volume(&lps, new_volume, conn->input_rate);
       // _loudness_set_volume(&loudness_r, new_volume, conn->input_rate);
       loudness_fix_volume_parameter = conn->fix_volume;
@@ -79,11 +102,27 @@ void loudness_update(rtsp_conn_info *conn) {
 
 void loudness_process_blocks(float *fbufs, unsigned int channel_length,
                              unsigned int number_of_channels, float gain) {
+  if (fbufs == NULL)
+    return;
+
   unsigned int channel_number, sample_index;
   float *sample_pointer = fbufs;
-  for (channel_number = 0; channel_number < number_of_channels; channel_number++) {
+  unsigned int filtered_channel_count = number_of_channels;
+  if (filtered_channel_count > MAXCHANNELS)
+    filtered_channel_count = MAXCHANNELS;
+
+  for (channel_number = 0; channel_number < filtered_channel_count; channel_number++) {
     for (sample_index = 0; sample_index < channel_length; sample_index++) {
       *sample_pointer = loudness_process(&loudness_filters[channel_number], *sample_pointer * gain);
+      sample_pointer++;
+    }
+  }
+
+  // Any channels beyond our filter bank get gain only.
+  for (channel_number = filtered_channel_count; channel_number < number_of_channels;
+       channel_number++) {
+    for (sample_index = 0; sample_index < channel_length; sample_index++) {
+      *sample_pointer = *sample_pointer * gain;
       sample_pointer++;
     }
   }

@@ -22,7 +22,7 @@ void _debug_print_msg_headers(rtsp_conn_info *conn, const char *filename, const 
 #define debug_print_msg_headers(level, message)                                                    \
   _debug_print_msg_headers(NULL, __FILE__, __LINE__, level, message)
 
-#define debug_print_msg_headers_conn(level, message)                                               \
+#define debug_print_msg_headers_conn(conn, level, message)                                         \
   _debug_print_msg_headers(conn, __FILE__, __LINE__, level, message)
 
 #ifdef CONFIG_AIRPLAY_2

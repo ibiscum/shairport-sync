@@ -46,9 +46,13 @@ char *str_replace(const char *string, const char *substr, const char *replacemen
   char *oldstr = NULL;
   char *head = NULL;
 
+  if (string == NULL)
+    return NULL;
+
   /* if either substr or replacement is NULL, duplicate string a let caller handle it */
-  if (substr == NULL || replacement == NULL)
+  if (substr == NULL || replacement == NULL || substr[0] == '\0')
     return strdup(string);
+
   newstr = strdup(string);
   head = newstr;
   if (head) {
@@ -69,8 +73,6 @@ char *str_replace(const char *string, const char *substr, const char *replacemen
       head = newstr + (tok - oldstr) + strlen(replacement);
       free(oldstr);
     }
-  } else {
-    die("failed to allocate memory in str_replace.");
   }
   return newstr;
 }
@@ -95,6 +97,9 @@ char *str_replace(const char *string, const char *substr, const char *replacemen
  *   to fit "..." + suffix, or malloc failure).
  */
 char *append_truncated(const char *base, const char *suffix, size_t limit) {
+
+  if ((base == NULL) || (suffix == NULL))
+    return NULL;
 
   const char *ellipsis = "...";
   size_t ellipsis_len = strlen(ellipsis);
@@ -147,28 +152,54 @@ char *append_truncated(const char *base, const char *suffix, size_t limit) {
 
 char *service_name(const char *raw_service_name) {
   char *response = NULL;
+  char *i0 = NULL;
+  char *i1 = NULL;
+  char *i2 = NULL;
+  char *i3 = NULL;
+  char *i4 = NULL;
+  char *vs = NULL;
+
   // now, do the substitutions in the service name
   char hostname[256];
-  gethostname(hostname, sizeof(hostname));
+  if (gethostname(hostname, sizeof(hostname) - 1) != 0)
+    hostname[0] = '\0';
+  hostname[sizeof(hostname) - 1] = '\0';
   // strip off a terminating .<anything>, e.g. .local from the hostname
   char *last_dot = strrchr(hostname, '.');
   if (last_dot != NULL)
     *last_dot = '\0';
 
-  char *i0;
   if (raw_service_name == NULL)
     i0 = strdup("%H"); // default
   else
     i0 = strdup(raw_service_name); // this is the string provided in the configuration or on the
                                    // command line.
+  if (i0 == NULL)
+    goto cleanup;
+
   // here, do the substitutions for %h, %H, %v and %V
-  char *i1 = str_replace(i0, "%h", hostname);
+  i1 = str_replace(i0, "%h", hostname);
+  if (i1 == NULL)
+    goto cleanup;
+
   if ((hostname[0] >= 'a') && (hostname[0] <= 'z'))
     hostname[0] = hostname[0] - 0x20; // convert a lowercase first letter into a capital letter
-  char *i2 = str_replace(i1, "%H", hostname);
-  char *i3 = str_replace(i2, "%v", PACKAGE_VERSION);
-  char *vs = get_version_string();
-  char *i4 = str_replace(i3, "%V", vs); // service name complete
+  i2 = str_replace(i1, "%H", hostname);
+  if (i2 == NULL)
+    goto cleanup;
+
+  i3 = str_replace(i2, "%v", PACKAGE_VERSION);
+  if (i3 == NULL)
+    goto cleanup;
+
+  vs = get_version_string();
+  if (vs == NULL)
+    goto cleanup;
+
+  i4 = str_replace(i3, "%V", vs); // service name complete
+  if (i4 == NULL)
+    goto cleanup;
+
   // now, we may need to add "(Classic)" and/or truncate it to MAX_AIRPLAY_SERVICE_NAME_LENGTH
   // characters.
 #ifdef CONFIG_AIRPLAY_2
@@ -184,6 +215,7 @@ char *service_name(const char *raw_service_name) {
 #ifdef CONFIG_AIRPLAY_2
   }
 #endif
+cleanup:
   free(i0);
   free(i1);
   free(i2);

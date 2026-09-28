@@ -38,9 +38,6 @@ ssize_t buffered_read(buffered_tcp_desc *descriptor, void *buf, size_t count,
   if (pthread_mutex_lock(&descriptor->mutex) != 0)
     debug(1, "problem with mutex");
   pthread_cleanup_push(mutex_unlock, (void *)&descriptor->mutex);
-  // wipe the slate dlean before reading...
-  descriptor->error_code = 0;
-  descriptor->closed = 0;
 
   if (descriptor->buffer_occupancy == 0) {
     debug(2, "buffered_read: buffer empty -- waiting for %zu bytes.", count);
@@ -110,11 +107,27 @@ void *buffered_tcp_reader(void *arg) {
   socklen_t addr_size = sizeof(remote_addr);
   int finished = 0;
   int fd = accept(descriptor->sock_fd, (struct sockaddr *)&remote_addr, &addr_size);
+  if (fd < 0) {
+    int saved_errno = errno;
+    char errorstring[1024];
+    strerror_r(saved_errno, (char *)errorstring, sizeof(errorstring));
+    debug(1, "buffered_tcp_reader: accept failed with error %d: \"%s\".", saved_errno,
+          errorstring);
+
+    if (pthread_mutex_lock(&descriptor->mutex) != 0)
+      debug(1, "problem with mutex while recording accept failure");
+    pthread_cleanup_push(mutex_unlock, (void *)&descriptor->mutex);
+    descriptor->error_code = saved_errno;
+    finished = 1;
+    if (pthread_cond_signal(&descriptor->not_empty_cv))
+      debug(1, "Error signalling after accept failure");
+    pthread_cleanup_pop(1); // release the mutex
+  }
   // debug(1, "buffered_tcp_reader: the client has opened a buffered audio link.");
   // intptr_t pfd = fd;
   pthread_cleanup_push(socket_cleanup, (void *)&fd);
 
-  do {
+  while (finished == 0) {
     int have_time_to_sleep = 0;
     if (pthread_mutex_lock(&descriptor->mutex) != 0)
       debug(1, "problem with mutex");
@@ -159,6 +172,7 @@ void *buffered_tcp_reader(void *arg) {
       debug(1, "error in buffered_tcp_reader %d: \"%s\". Could not recv a packet.", errno,
             errorstring);
       descriptor->error_code = errno;
+      finished = 1;
     } else if (nread == 0) {
       descriptor->closed = 1;
       debug(
@@ -178,7 +192,7 @@ void *buffered_tcp_reader(void *arg) {
     pthread_cleanup_pop(1); // release the mutex
     if (have_time_to_sleep)
       usleep(10000); // give other threads a chance to run...
-  } while (finished == 0);
+  }
 
   debug(2, "Buffered TCP Reader Thread Exit \"Normal\" Exit Begin.");
   pthread_cleanup_pop(1); // close the socket

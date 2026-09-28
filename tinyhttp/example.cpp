@@ -55,8 +55,8 @@ int connectsocket(const char* host, int port)
 {
 
     addrinfo* result = NULL;
-    sockaddr_in addr = {0};
-    int s;
+    sockaddr_in addr{};
+    int s = -1;
 
     if (getaddrinfo(host, NULL, NULL, &result))
         goto error;
@@ -103,6 +103,7 @@ struct HttpResponse {
 
 static void* response_realloc(void* opaque, void* ptr, int size)
 {
+    (void)opaque;
     return realloc(ptr, size);
 }
 
@@ -113,7 +114,14 @@ static void response_body(void* opaque, const char* data, int size)
 }
 
 static void response_header(void* opaque, const char* ckey, int nkey, const char* cvalue, int nvalue)
-{ /* example doesn't care about headers */ }
+{
+    (void)opaque;
+    (void)ckey;
+    (void)nkey;
+    (void)cvalue;
+    (void)nvalue;
+    /* example doesn't care about headers */
+}
 
 static void response_code(void* opaque, int code)
 {

@@ -1,4 +1,4 @@
-# Adjusting Synchronisation with Shairport Sync
+# Adjusting Synchronization with Shairport Sync
 
 Sometimes, a timing difference can be heard, where the audio coming from the Shairport-Sync-powered device is slightly ahead or slightly behind another device playing in synchrony. This can sometimes be heard as an irritating "echo".
 
@@ -16,9 +16,9 @@ The fix for this is to get Shairport Sync to compensate for delays by providing 
 
 The setting to look for is in the `general` section of the Shairport Sync configuration file and is called `audio_backend_latency_offset_in_seconds`. By default it is `0.0` seconds.
 
-For example, to delay the output from the Shairport Sync device by 100 milliseconds (0.1 seconds), set the `audio_backend_latency_offset_in_seconds` to `0.1`, so that audio is provided to your output device 100 milliseconds later than nominal synchronisation time.
+For example, to delay the output from the Shairport Sync device by 100 milliseconds (0.1 seconds), set the `audio_backend_latency_offset_in_seconds` to `0.1`, so that audio is provided to your output device 100 milliseconds later than nominal synchronization time.
 
-Similarly, to get the output from the Shairport Sync device 50 milliseconds (0.05 seconds) early, set the `audio_backend_latency_offset_in_seconds` to `-0.05`, so that audio is provided to your output device 50 milliseconds earlier than nominal synchronisation time.
+Similarly, to get the output from the Shairport Sync device 50 milliseconds (0.05 seconds) early, set the `audio_backend_latency_offset_in_seconds` to `-0.05`, so that audio is provided to your output device 50 milliseconds earlier than nominal synchronization time.
 
 Latency adjustments should be small, not more than about ± 250 milliseconds.
 

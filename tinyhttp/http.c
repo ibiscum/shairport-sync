@@ -27,6 +27,7 @@
 #include "http.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <string.h>
 
 #include "header.h"
@@ -115,7 +116,10 @@ int http_data(struct http_roundtripper* rt, const char* data, int size, int* rea
                 break;
 
             case http_header_status_code_character:
-                rt->code = rt->code * 10 + *data - '0';
+                if (*data < '0' || *data > '9' || rt->code > (INT_MAX - 9) / 10)
+                    rt->state = http_roundtripper_error;
+                else
+                    rt->code = rt->code * 10 + *data - '0';
                 break;
 
             case http_header_status_key_character:
@@ -136,8 +140,15 @@ int http_data(struct http_roundtripper* rt, const char* data, int size, int* rea
                 else if (rt->nkey == 14 && 0 == strncmp(rt->scratch, "content-length", rt->nkey)) {
                     int ii, end;
                     rt->contentlength = 0;
-                    for (ii = rt->nkey, end = rt->nkey + rt->nvalue; ii != end; ++ii)
+                    for (ii = rt->nkey, end = rt->nkey + rt->nvalue; ii != end; ++ii) {
+                        if (rt->scratch[ii] < '0' || rt->scratch[ii] > '9' ||
+                            rt->contentlength > (INT_MAX - 9) / 10) {
+                            rt->state = http_roundtripper_error;
+                            break;
+                        }
+
                         rt->contentlength = rt->contentlength * 10 + rt->scratch[ii] - '0';
+                    }
                 }
 
                 rt->funcs.header(rt->opaque, rt->scratch, rt->nkey, rt->scratch + rt->nkey, rt->nvalue);
