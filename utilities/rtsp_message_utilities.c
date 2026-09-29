@@ -46,8 +46,10 @@ static int msg_indexes = 1;
 
 void msg_retain(rtsp_message *msg) {
   int rc = pthread_mutex_lock(&reference_counter_lock);
-  if (rc)
+  if (rc) {
     debug(1, "Error %d locking reference counter lock", rc);
+    return;
+  }
   if (msg > (rtsp_message *)0x00010000) {
     msg->referenceCount++;
     debug(4, "msg_free increment reference counter message %d to %d.", msg->index_number,

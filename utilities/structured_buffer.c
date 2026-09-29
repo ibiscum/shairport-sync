@@ -76,11 +76,11 @@ void sbuf_cleanup(void *arg) {
 int sbuf_printf(structured_buffer *sbuf, const char *format, ...) {
   int response = -1;
   if ((sbuf != NULL) && (sbuf->buf != NULL) && (format != NULL)) {
-    if (sbuf->buf_pos > sbuf->buf_size)
+    if (sbuf->buf_pos >= sbuf->buf_size)
       return -1;
 
     char *p = sbuf->buf + sbuf->buf_pos;
-    size_t available = (sbuf->buf_size - sbuf->buf_pos) + 1;
+    size_t available = sbuf->buf_size - sbuf->buf_pos;
     va_list args;
     va_start(args, format);
     int needed = vsnprintf(p, available, format, args);
