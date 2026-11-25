@@ -134,7 +134,7 @@ FreeBSD and most recent Linux distributions can run an application as a daemon w
 | `--with-systemdsystemunitdir=<dir>` |
 | `--with-systemv-startup` |
 | `--with-freebsd-startup` |
-| `--with-cygwin-service` |
+| `--with-cygwin-startup` |
 
 Daemon programs such as Shairport Sync should be started automatically so that the service they provide becomes available without further intervention. Typically this is done using startup scripts. Four options are provided – two for Linux, one for FreeBSD and one for CYGWIN. In Linux, the choice depends on whether [systemd](https://en.wikipedia.org/wiki/Systemd) is used or not. If `systemd` is installed, then the `--with-systemd-startup` option is suggested. If not, the `--with-systemv-startup` option is suggested.
 
@@ -142,7 +142,7 @@ Daemon programs such as Shairport Sync should be started automatically so that t
   - `--with-systemdsystemunitdir=<dir>` Specifies the directory for `systemd` service files.
 - `--with-systemv-startup` Includes a script to create a Shairport Sync service that can optionally launch automatically at startup on System V based Linuxes. Default is not to to install.
 - `--with-freebsd-startup` Includes a script to create a Shairport Sync service that can optionally launch automatically at startup on FreeBSD. Default is not to to install.
-- `--with-cygwin-service` Includes a script to create a Shairport Sync service that can optionally launch automatically at startup on CYGWIN. Default is not to to install.
+- `--with-cygwin-startup` Includes a script to create a Shairport Sync service that can optionally launch automatically at startup on CYGWIN. Default is not to to install.
 
 ### Cryptography
 | Flags |

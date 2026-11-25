@@ -12,6 +12,8 @@ This index links to architecture and flow notes in this folder.
 - [Common-Utilities-Flow.md](Common-Utilities-Flow.md)
 - [ALAC-Hammerton-Decoder-Flow.md](ALAC-Hammerton-Decoder-Flow.md)
 
+Note: [Shairport-Main-Flow.md](Shairport-Main-Flow.md) includes mDNS contract notes for TinySVCmDNS null-safety and DNS label normalization behavior.
+
 ## Audio Backend Flows
 
 - [ALSA-Audio-Backend-Flow.md](ALSA-Audio-Backend-Flow.md)

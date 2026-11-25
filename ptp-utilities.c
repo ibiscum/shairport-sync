@@ -48,6 +48,7 @@
 
 int shm_fd;
 void *mapped_addr = NULL;
+static pthread_mutex_t ptp_shm_interface_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // returns a copy of the shared memory data from the nqptp
 // shared memory interface, so long as it's open.
@@ -55,6 +56,8 @@ int get_nqptp_data(struct shm_structure *nqptp_data) {
   // uint64_t tn = get_absolute_time_in_ns(); // if interested in timing the function...
   struct shm_structure local_nqptp_data;
   int response = -1; // presume the worst. Fix it on success
+
+  pthread_mutex_lock(&ptp_shm_interface_mutex);
 
   // We need to ensure that when we read the record, we are not reading it while it is partly
   // updated and therefore inconsistent. To achieve this, we do the following:
@@ -105,6 +108,7 @@ int get_nqptp_data(struct shm_structure *nqptp_data) {
     else
       debug(1, "get_nqptp_data failed");
   }
+  pthread_mutex_unlock(&ptp_shm_interface_mutex);
   // int64_t et = get_absolute_time_in_ns() - tn;
   // debug(1, "get_nqptp_data time: %.3f microseconds.", 0.001 * et);
   return response;
@@ -163,6 +167,7 @@ int ptp_get_clock_info(uint64_t *actual_clock_id, uint64_t *time_of_sample, uint
 
 int ptp_shm_interface_open() {
   int response = 0;
+  pthread_mutex_lock(&ptp_shm_interface_mutex);
   debug(3, "ptp_shm_interface_open with mapped_addr = %" PRIuPTR "", (uintptr_t)mapped_addr);
   if ((mapped_addr == NULL) || (mapped_addr == MAP_FAILED)) {
     response = -1;
@@ -200,22 +205,38 @@ int ptp_shm_interface_open() {
   } else {
     debug(3, "ptp_shm_interface_open -- already open!");
   }
+  pthread_mutex_unlock(&ptp_shm_interface_mutex);
   return response;
 }
 
 int ptp_shm_interface_close() {
-  int response = -1;
+  int response = 0;
+  pthread_mutex_lock(&ptp_shm_interface_mutex);
   if ((mapped_addr != MAP_FAILED) && (mapped_addr != NULL)) {
     debug(2, "ptp_shm_interface_close");
     response = munmap(mapped_addr, sizeof(struct shm_structure));
     if (response != 0)
       debug(1, "error unmapping shared memory.");
+  } else {
+    debug(3, "ptp_shm_interface_close -- already closed!");
   }
   mapped_addr = NULL;
+  pthread_mutex_unlock(&ptp_shm_interface_mutex);
   return response;
 }
 
 void ptp_send_control_message_string(const char *msg) {
+  if ((config.nqptp_shared_memory_interface_name == NULL) ||
+      (config.nqptp_shared_memory_interface_name[0] == '\0')) {
+    warn("Can't send control message to NQPTP: shared memory interface name is not set.");
+    return;
+  }
+
+  if ((msg == NULL) || (msg[0] == '\0')) {
+    warn("Can't send control message to NQPTP: message is empty.");
+    return;
+  }
+
   size_t full_message_size =
       strlen(config.nqptp_shared_memory_interface_name) + strlen(" ") + strlen(msg) + 1;
   char *full_message = malloc(full_message_size);
@@ -224,7 +245,7 @@ void ptp_send_control_message_string(const char *msg) {
     snprintf(full_message, full_message_size, "%s %s", config.nqptp_shared_memory_interface_name,
              msg);
     debug(2, "Send control message to NQPTP: \"%s\"", full_message);
-    int s;
+    int s = -1;
     int ret;
     struct addrinfo hints, *info;
 
@@ -239,19 +260,28 @@ void ptp_send_control_message_string(const char *msg) {
 
     ret = getaddrinfo("localhost", portstr, &hints, &info);
     if (ret) {
-      die("getaddrinfo: %s", gai_strerror(ret));
+      warn("Can't resolve NQPTP control address: %s", gai_strerror(ret));
+      free(full_message);
+      return;
     }
 
     /* Create a datagram socket in the internet domain and use the
      * default protocol (UDP).
      */
     if ((s = socket(info->ai_family, info->ai_socktype, 0)) < 0) {
-      die("Can't open a socket to NQPTP");
+      char em[1024];
+      strerror_r(errno, em, sizeof(em));
+      warn("Can't open a socket to NQPTP: %s", em);
+      freeaddrinfo(info);
+      free(full_message);
+      return;
     }
 
     /* Send the message in buf to the server */
     if (sendto(s, full_message, full_message_size, 0, info->ai_addr, info->ai_addrlen) < 0) {
-      die("error sending timing_peer_list to NQPTP");
+      char em[1024];
+      strerror_r(errno, em, sizeof(em));
+      warn("Error sending control message to NQPTP: %s", em);
     }
     /* Deallocate the socket */
     safe_socket_close(&s);

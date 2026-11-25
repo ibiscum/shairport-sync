@@ -34,11 +34,13 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <math.h>
 #include <memory.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <strings.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,8 +73,7 @@ struct Nvll {
 
 typedef struct Nvll nvll;
 
-uint64_t local_to_remote_time_jitter;
-uint64_t local_to_remote_time_jitter_count;
+static pthread_mutex_t gradients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
       char obf[4096];
@@ -159,6 +160,10 @@ void rtp_initialise(rtsp_conn_info *conn) {
 }
 
 void rtp_terminate(rtsp_conn_info *conn) {
+  if (conn->rtp_running != 0) {
+    warn("rtp_terminate called while RTP is still running; skipping mutex destroy.");
+    return;
+  }
   conn->anchor_rtptime = 0;
   // destroy the timer mutex
   int rc = pthread_mutex_destroy(&conn->reference_time_mutex);
@@ -247,7 +252,7 @@ void *rtp_audio_receiver(void *arg) {
           pktp += 4;
           plen -= 4;
         }
-        seq_t seqno = ntohs(*(uint16_t *)(pktp + 2));
+        seq_t seqno = nctohs(pktp + 2);
         // increment last_seqno and see if it's the same as the incoming seqno
 
         if (type == 0x60) { // regular audio data
@@ -276,7 +281,7 @@ void *rtp_audio_receiver(void *arg) {
           debug(3, "Audio Receiver -- Retransmitted Audio Data Packet %u received.", seqno);
         }
 
-        uint32_t actual_timestamp = ntohl(*(uint32_t *)(pktp + 4));
+        uint32_t actual_timestamp = nctohl(pktp + 4);
 
         // uint32_t ssid = ntohl(*(uint32_t *)(pktp + 8));
         // debug(1, "Audio packet SSID: %08X,%u", ssid,ssid);
@@ -550,10 +555,10 @@ void *rtp_control_receiver(void *arg) {
         } else if (packet[1] == 0xd6) { // resent audio data in the control path -- whaale only?
           pktp = packet + 4;
           plen -= 4;
-          seq_t seqno = ntohs(*(uint16_t *)(pktp + 2));
+          seq_t seqno = nctohs(pktp + 2);
           debug(3, "Control Receiver -- Retransmitted Audio Data Packet %u received.", seqno);
 
-          uint32_t actual_timestamp = ntohl(*(uint32_t *)(pktp + 4));
+          uint32_t actual_timestamp = nctohl(pktp + 4);
 
           pktp += 12;
           plen -= 12;
@@ -666,6 +671,8 @@ void *rtp_timing_sender(void *arg) {
 void rtp_timing_receiver_cleanup_handler(void *arg) {
   rtsp_conn_info *conn = (rtsp_conn_info *)arg;
   debug(3, "Timing Receiver Cleanup.");
+
+  pthread_mutex_lock(&gradients_mutex);
   // walk down the list of DACP / gradient pairs, if any
   nvll *gradients = config.gradients;
   if (conn->dacp_id)
@@ -689,6 +696,7 @@ void rtp_timing_receiver_cleanup_handler(void *arg) {
       // - 1.0)*1000000, new_entry->name);
     }
   }
+  pthread_mutex_unlock(&gradients_mutex);
 
   debug(3, "Cancel Timing Requester.");
   pthread_cancel(conn->timer_requester);
@@ -712,13 +720,14 @@ void *rtp_timing_receiver(void *arg) {
                        conn->connection_number);
   //    struct timespec att;
   uint64_t distant_receive_time, distant_transmit_time, arrival_time, return_time;
-  local_to_remote_time_jitter = 0;
-  local_to_remote_time_jitter_count = 0;
 
   uint64_t first_local_to_remote_time_difference = 0;
+  uint64_t local_to_remote_time_jitter = 0;
+  uint64_t local_to_remote_time_jitter_count = 0;
 
   conn->local_to_remote_time_gradient = 1.0; // initial value.
   // walk down the list of DACP / gradient pairs, if any
+  pthread_mutex_lock(&gradients_mutex);
   nvll *gradients = config.gradients;
   while ((gradients) && (strcasecmp((const char *)&conn->client_ip_string, gradients->name) != 0))
     gradients = gradients->next;
@@ -729,6 +738,7 @@ void *rtp_timing_receiver(void *arg) {
     // debug(1,"Using a stored drift of %.2f ppm for \"%s\".", (conn->local_to_remote_time_gradient
     // - 1.0)*1000000, gradients->name);
   }
+  pthread_mutex_unlock(&gradients_mutex);
 
   // calculate diffusion factor
 
@@ -1194,7 +1204,7 @@ void rtp_request_resend(seq_t first, uint32_t count, rtsp_conn_info *conn) {
     if (conn->airplay_type == ap_2) {
       if (conn->ap2_remote_control_socket_addr_length == 0) {
         debug(2, "No remote socket -- skipping the resend");
-        return; // hack
+        return;
       }
       req[1] = 0xD5; // Airplay 2 'resend'
     } else {
@@ -1339,18 +1349,13 @@ void set_ptp_anchor_info(rtsp_conn_info *conn, uint64_t clock_id, uint32_t rtpti
   debug(2, "set_ptp_anchor_info done.");
 }
 
-int long_time_notifcation_done = 0;
-
-uint64_t previous_offset = 0;
-uint64_t previous_clock_id = 0;
-
 void reset_ptp_anchor_info(rtsp_conn_info *conn) {
   debug(2, "Connection %d: Clear anchor information.", conn->connection_number);
   conn->last_anchor_info_is_valid = 0;
   conn->anchor_remote_info_is_valid = 0;
-  long_time_notifcation_done = 0;
-  previous_offset = 0;
-  previous_clock_id = 0;
+  conn->long_time_notification_done = 0;
+  conn->previous_ptp_offset = 0;
+  conn->previous_ptp_clock_id = 0;
 }
 
 int get_ptp_anchor_local_time_info(rtsp_conn_info *conn, uint32_t *anchorRTP,
@@ -1368,20 +1373,20 @@ int get_ptp_anchor_local_time_info(rtsp_conn_info *conn, uint32_t *anchorRTP,
       if (time_since_start_of_mastership >= 400000000L) {
         int64_t time_since_sample = time_now - actual_time_of_sample;
         if (time_since_sample > 300000000000L) {
-          if (long_time_notifcation_done == 0) {
+          if (conn->long_time_notification_done == 0) {
             debug(1, "The last PTP timing sample is pretty old: %f seconds.",
                   0.000000001 * time_since_sample);
-            long_time_notifcation_done = 1;
+            conn->long_time_notification_done = 1;
           }
-        } else if ((time_since_sample < 2000000000) && (long_time_notifcation_done != 0)) {
+        } else if ((time_since_sample < 2000000000) && (conn->long_time_notification_done != 0)) {
           debug(1, "The last PTP timing sample is no longer too old: %f seconds.",
                 0.000000001 * time_since_sample);
-          long_time_notifcation_done = 0;
+          conn->long_time_notification_done = 0;
         }
 
-        int64_t jitter = actual_offset - previous_offset;
+        int64_t jitter = actual_offset - conn->previous_ptp_offset;
 
-        if ((previous_offset != 0) && (previous_clock_id == actual_clock_id) &&
+        if ((conn->previous_ptp_offset != 0) && (conn->previous_ptp_clock_id == actual_clock_id) &&
             ((jitter > 3000000) || (jitter < -3000000)))
           debug(1,
                 "Clock jitter: %.3f mS. Time since sample: %.3f mS. Time since start of "
@@ -1390,8 +1395,8 @@ int get_ptp_anchor_local_time_info(rtsp_conn_info *conn, uint32_t *anchorRTP,
                 jitter * 0.000001, time_since_sample * 0.000001,
                 time_since_start_of_mastership * 0.000000001);
 
-        previous_offset = actual_offset;
-        previous_clock_id = actual_clock_id;
+        conn->previous_ptp_offset = actual_offset;
+        conn->previous_ptp_clock_id = actual_clock_id;
 
         if (actual_clock_id == conn->anchor_clock) {
           conn->last_anchor_rtptime = conn->anchor_rtptime;
@@ -1445,10 +1450,6 @@ int get_ptp_anchor_local_time_info(rtsp_conn_info *conn, uint32_t *anchorRTP,
       case clock_ok:
         debug(2, "Connection %d: NQPTP master clock %" PRIx64 ".", conn->connection_number,
               actual_clock_id);
-        break;
-      case clock_not_ready:
-        debug(2, "Connection %d: NQPTP master clock %" PRIx64 " is available but not ready.",
-              conn->connection_number, actual_clock_id);
         break;
       case clock_service_unavailable:
         debug(1, "Connection %d: NQPTP clock is not available.", conn->connection_number);

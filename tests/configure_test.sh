@@ -170,8 +170,8 @@ check_for_success x$1 --without-ao --with-ssl=mbedtls x ao
 #check_for_success x$1 --with-soundio --with-ssl=mbedtls soundio
 check_for_success x$1 --without-soundio --with-ssl=mbedtls x soundio
 
-check_for_success x$1 --with-pa --with-ssl=mbedtls pa
-check_for_success x$1 --without-pa --with-ssl=mbedtls x pa
+check_for_success x$1 --with-pulseaudio --with-ssl=mbedtls pa
+check_for_success x$1 --without-pulseaudio --with-ssl=mbedtls x pa
 
 check_for_success x$1 --with-convolution --with-ssl=mbedtls convolution
 check_for_success x$1 --without-convolution --with-ssl=mbedtls x convolution
@@ -194,13 +194,13 @@ check_for_success x$1 --without-mpris-test-client --with-ssl=mbedtls
 check_for_success x$1 --with-mqtt-client --with-ssl=mbedtls metadata-mqtt
 check_for_success x$1 --without-mqtt-client --with-ssl=mbedtls x mqtt
 
-check_for_success x$1 --with-configfiles '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl --with-systemd' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
-check_for_success x$1 --without-configfiles '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl --with-systemd' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --with-configfiles '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl --with-systemd-startup' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --without-configfiles '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl --with-systemd-startup' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
 
-check_for_success x$1 --with-systemd '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
-check_for_success x$1 --without-systemd '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
-check_for_success x$1 --with-systemv '--sysconfdir=/etc --with-libdaemon --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
-check_for_success x$1 --without-systemv '--sysconfdir=/etc --with-libdaemon --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --with-systemd-startup '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --without-systemd-startup '--sysconfdir=/etc --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --with-systemv-startup '--sysconfdir=/etc --with-libdaemon --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
+check_for_success x$1 --without-systemv-startup '--sysconfdir=/etc --with-libdaemon --with-alsa --with-soxr --with-avahi --with-ssl=openssl' OpenSSL-Avahi-ALSA-soxr-sysconfdir:/etc
 
 cd $CWD
 echo "$TESTCOUNT tests completed."

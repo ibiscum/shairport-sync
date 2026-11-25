@@ -1,5 +1,5 @@
-#ifndef _PLAYER_COMMON_H
-#define _PLAYER_COMMON_H
+#ifndef PLAYER_COMMON_H
+#define PLAYER_COMMON_H
 
 #include <limits.h>
 #include <stddef.h>
@@ -46,4 +46,12 @@ static inline const char *player_stream_category_name(airplay_stream_c category)
     }
 }
 
-#endif
+static inline int player_pthread_create_succeeded(int rc) {
+    return rc == 0;
+}
+
+static inline int player_pthread_join_succeeded(int rc) {
+    return rc == 0;
+}
+
+#endif // PLAYER_COMMON_H

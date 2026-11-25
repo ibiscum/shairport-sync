@@ -27,7 +27,7 @@
 
 // The control port expects a UDP packet with the first character being a command letter
 // and the rest being any arguments, the whole not to exceed 4096 characters.
-// The "T" command,  must followed by nothing or by
+// The "T" command must be followed by nothing or by
 // a space and a space-delimited list of IPv4 or IPv6 numbers.
 // The IPs, if provided, will become the new list of timing peers, replacing any
 // previous list. The first IP number is the clock that NQPTP will listen to.
@@ -54,6 +54,7 @@
 
 #include <inttypes.h>
 #include <pthread.h>
+#include <stddef.h>
 
 typedef struct {
   uint64_t master_clock_id;             // the current master clock
@@ -61,6 +62,9 @@ typedef struct {
   uint64_t local_to_master_time_offset; // add this to the local time to get master clock time
   uint64_t master_clock_start_time;     // this is when the master clock became master
 } shm_structure_set;
+
+// Preferred explicit aliases to reduce naming ambiguity in larger integrations.
+typedef shm_structure_set nqptp_shm_structure_set;
 
 // The actual interface comprises a shared memory region of type struct shm_structure.
 // This comprises two records of type shm_structure_set.
@@ -74,5 +78,19 @@ struct shm_structure {
   shm_structure_set main;
   shm_structure_set secondary;
 };
+
+typedef struct shm_structure nqptp_shm_structure;
+
+// Shared-memory ABI guards: keep explicit layout assumptions visible and checked.
+_Static_assert(sizeof(shm_structure_set) == 32,
+               "Unexpected shm_structure_set size; shared-memory ABI mismatch.");
+_Static_assert(offsetof(struct shm_structure, version) == 0,
+               "Unexpected shm_structure.version offset; shared-memory ABI mismatch.");
+_Static_assert(offsetof(struct shm_structure, main) == 8,
+               "Unexpected shm_structure.main offset; shared-memory ABI mismatch.");
+_Static_assert(offsetof(struct shm_structure, secondary) == 40,
+               "Unexpected shm_structure.secondary offset; shared-memory ABI mismatch.");
+_Static_assert(sizeof(struct shm_structure) == 72,
+               "Unexpected shm_structure size; shared-memory ABI mismatch.");
 
 #endif

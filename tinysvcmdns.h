@@ -31,6 +31,7 @@
  */
 
 #ifndef _TINYSVCMDNS_H
+#define _TINYSVCMDNS_H
 
 //******************************************************//
 //                      mdns.h                          //
@@ -108,6 +109,7 @@ struct rr_entry {
   // for use in Answers only
   char cache_flush;
 
+  // DNS class bits only; the top cache-flush bit is represented by cache_flush.
   uint16_t rr_class;
 
   // RR data
@@ -144,9 +146,19 @@ struct rr_group {
 #define MDNS_FLAG_GET_RCODE(x) (x & 0x0F)
 #define MDNS_FLAG_GET_OPCODE(x) ((x >> 11) & 0x0F)
 
-// gets the PTR target name, either from "name" member or "entry" member
-#define MDNS_RR_GET_PTR_NAME(rr)                                                                   \
-  (rr->data.PTR.name != NULL ? rr->data.PTR.name : rr->data.PTR.entry->name)
+// Gets the PTR target name, either from "name" or from "entry->name".
+// Returns NULL if no target name is available.
+static inline uint8_t *mdns_rr_get_ptr_name(const struct rr_entry *rr) {
+  if (rr == NULL)
+    return NULL;
+  if (rr->data.PTR.name != NULL)
+    return rr->data.PTR.name;
+  if (rr->data.PTR.entry != NULL)
+    return rr->data.PTR.entry->name;
+  return NULL;
+}
+
+#define MDNS_RR_GET_PTR_NAME(rr) mdns_rr_get_ptr_name(rr)
 
 struct mdns_pkt {
   uint16_t id; // transaction ID
@@ -190,16 +202,15 @@ void rr_add_txt(struct rr_entry *rr_txt, const char *txt);
 const char *rr_get_type_name(enum rr_type type);
 
 uint8_t *create_label(const char *txt);
+// Creates an uncompressed DNS name label from a dotted name and normalizes to lowercase.
 uint8_t *create_nlabel(const char *name);
 char *nlabel_to_str(const uint8_t *name);
 uint8_t *dup_label(const uint8_t *label);
 uint8_t *dup_nlabel(const uint8_t *n);
 uint8_t *join_nlabel(const uint8_t *n1, const uint8_t *n2);
 
-// compares 2 names
-static inline int cmp_nlabel(const uint8_t *L1, const uint8_t *L2) {
-  return strcmp((char *)L1, (char *)L2);
-}
+// Compares two DNS names case-insensitively per DNS rules. Accepts NULL pointers.
+int cmp_nlabel(const uint8_t *L1, const uint8_t *L2);
 
 //******************************************************//
 //                      mdnsd.h                         //

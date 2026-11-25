@@ -40,6 +40,9 @@ static int mqtt_lib_initialised = 0;
 static int metadata_mqtt_queue_initialised = 0;
 static pthread_mutex_t mqtt_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+static void send_autodiscovery_messages(struct mosquitto *mosq);
+static void metadata_mqtt_close(void);
+
 static void mqtt_set_connected(int state) {
   pthread_mutex_lock(&mqtt_state_mutex);
   connected = state;
@@ -55,8 +58,8 @@ static int mqtt_is_connected(void) {
 }
 
 // mosquitto logging
-void _cb_log(__attribute__((unused)) struct mosquitto *mosq, __attribute__((unused)) void *userdata,
-             int level, const char *str) {
+static void _cb_log(__attribute__((unused)) struct mosquitto *mosq,
+                    __attribute__((unused)) void *userdata, int level, const char *str) {
   switch (level) {
   case MOSQ_LOG_DEBUG:
     debug(3, "%s", str);
@@ -78,8 +81,9 @@ void _cb_log(__attribute__((unused)) struct mosquitto *mosq, __attribute__((unus
 }
 
 // mosquitto message handler
-void on_message(__attribute__((unused)) struct mosquitto *mosq,
-                __attribute__((unused)) void *userdata, const struct mosquitto_message *msg) {
+static void on_message(__attribute__((unused)) struct mosquitto *mosq,
+                       __attribute__((unused)) void *userdata,
+                       const struct mosquitto_message *msg) {
 
   if ((msg == NULL) || (msg->payload == NULL) || (msg->payloadlen < 0)) {
     debug(1, "[MQTT]: received invalid message payload");
@@ -181,14 +185,14 @@ void on_message(__attribute__((unused)) struct mosquitto *mosq,
   free(payload);
 }
 
-void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
-                   __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {
+static void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
+                          __attribute__((unused)) void *userdata,
+                          __attribute__((unused)) int rc) {
   mqtt_set_connected(0);
   debug(2, "[MQTT]: disconnected");
 }
 
-void on_connect(struct mosquitto *mosq, __attribute__((unused)) void *userdata,
-                int rc) {
+static void on_connect(struct mosquitto *mosq, __attribute__((unused)) void *userdata, int rc) {
   if (rc != 0) {
     mqtt_set_connected(0);
     warn("[MQTT]: connect callback returned error code %d", rc);
@@ -212,7 +216,7 @@ void on_connect(struct mosquitto *mosq, __attribute__((unused)) void *userdata,
 }
 
 // function to send autodiscovery messages for Home Assistant
-void send_autodiscovery_messages(struct mosquitto *mosq) {
+static void send_autodiscovery_messages(struct mosquitto *mosq) {
   if ((mosq == NULL) || (config.service_name == NULL) || (config.mqtt_topic == NULL))
     return;
 
@@ -356,11 +360,11 @@ void send_autodiscovery_messages(struct mosquitto *mosq) {
 }
 
 // helper function to publish under a topic and automatically append the main topic
-void mqtt_publish(char *topic, char *data_in, uint32_t length_in) {
+void mqtt_publish(const char *topic, const char *data_in, uint32_t length_in) {
   if ((global_mosq == NULL) || (topic == NULL) || (config.mqtt_topic == NULL))
     return;
 
-  char *data = data_in;
+  const char *data = data_in;
   uint32_t length = length_in;
 
   if ((length == 0) && (config.mqtt_empty_payload_substitute != NULL)) {
@@ -393,11 +397,17 @@ void mqtt_publish(char *topic, char *data_in, uint32_t length_in) {
 }
 
 // handler for incoming metadata
-void mqtt_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t length) {
+void mqtt_process_metadata(uint32_t type, uint32_t code, const char *data, uint32_t length) {
   if (global_mosq == NULL || mqtt_is_connected() != 1) {
     debug(3, "[MQTT]: Client not connected, skipping metadata handling");
     return;
   }
+
+  if ((data == NULL) && (length > 0)) {
+    warn("[MQTT]: Invalid metadata payload: NULL data with non-zero length (%u)", length);
+    return;
+  }
+
   if (config.mqtt_publish_raw) {
     uint32_t val;
     char topic[] = "____/____";
@@ -588,7 +598,7 @@ int initialise_mqtt() {
 }
 
 // metadata handling stuff
-void metadata_mqtt_close(void) {
+static void metadata_mqtt_close(void) {
   mqtt_set_connected(0);
   if (global_mosq) {
     mosquitto_disconnect(global_mosq);
@@ -675,27 +685,12 @@ int initialise_mqtt() { return 0; }
 
 void mqtt_process_metadata(__attribute__((unused)) uint32_t type,
                            __attribute__((unused)) uint32_t code,
-                           __attribute__((unused)) char *data,
+                           __attribute__((unused)) const char *data,
                            __attribute__((unused)) uint32_t length) {}
 
-void mqtt_publish(__attribute__((unused)) char *topic, __attribute__((unused)) char *data_in,
+void mqtt_publish(__attribute__((unused)) const char *topic,
+                  __attribute__((unused)) const char *data_in,
                   __attribute__((unused)) uint32_t length_in) {}
-
-void send_autodiscovery_messages(__attribute__((unused)) struct mosquitto *mosq) {}
-
-void on_connect(__attribute__((unused)) struct mosquitto *mosq,
-                __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {}
-
-void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
-                   __attribute__((unused)) void *userdata, __attribute__((unused)) int rc) {}
-
-void on_message(__attribute__((unused)) struct mosquitto *mosq,
-                __attribute__((unused)) void *userdata,
-                __attribute__((unused)) const struct mosquitto_message *msg) {}
-
-void _cb_log(__attribute__((unused)) struct mosquitto *mosq,
-             __attribute__((unused)) void *userdata, __attribute__((unused)) int level,
-             __attribute__((unused)) const char *str) {}
 
 void metadata_mqtt_queue_init() {}
 

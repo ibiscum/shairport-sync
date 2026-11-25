@@ -1,6 +1,9 @@
 #ifndef _RTSP_H
 #define _RTSP_H
 
+#include <stddef.h>
+#include <sys/types.h>
+
 #include "player.h"
 
 typedef struct {
@@ -25,10 +28,6 @@ void msg_retain(rtsp_message *msg);
 void msg_free(rtsp_message **msgh);
 
 void *rtsp_listen_loop(__attribute((unused)) void *arg);
-
-// this can be used to [try to] forcibly stop a play session
-// play_lock_r get_play_lock(rtsp_conn_info *conn, int allow_session_interruption);
-// this will release the play lock only if the conn has it or if the conn is NULL
 
 void stop_play(); // stop and drop a playing connection
 

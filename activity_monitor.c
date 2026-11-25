@@ -143,13 +143,6 @@ void activity_thread_cleanup_handler(__attribute__((unused)) void *arg) {
 }
 
 void *activity_monitor_thread_code(void *arg) {
-  int rc = pthread_mutex_init(&activity_monitor_mutex, NULL);
-  if (rc)
-    die("activity_monitor: error %d initialising activity_monitor_mutex.", rc);
-
-  rc = pthread_cond_init(&activity_monitor_cv, NULL);
-  if (rc)
-    die("activity_monitor: error %d initialising activity_monitor_cv.", rc);
   pthread_cleanup_push(activity_thread_cleanup_handler, arg);
 
   uint64_t sec;
@@ -233,10 +226,25 @@ void *activity_monitor_thread_code(void *arg) {
   pthread_exit(NULL);
 }
 
-enum am_state activity_status() { return (state); }
+enum am_state activity_status() {
+  pthread_mutex_lock(&activity_monitor_mutex);
+  enum am_state status = state;
+  pthread_mutex_unlock(&activity_monitor_mutex);
+  return status;
+}
 
 void activity_monitor_start() {
   // debug(1,"activity_monitor_start");
+  int rc = pthread_mutex_init(&activity_monitor_mutex, NULL);
+  if (rc)
+    die("activity_monitor: error %d initialising activity_monitor_mutex.", rc);
+
+  rc = pthread_cond_init(&activity_monitor_cv, NULL);
+  if (rc) {
+    pthread_mutex_destroy(&activity_monitor_mutex);
+    die("activity_monitor: error %d initialising activity_monitor_cv.", rc);
+  }
+
   named_pthread_create(&activity_monitor_thread, NULL, activity_monitor_thread_code, NULL,
                        "activity_mon");
   activity_monitor_running = 1;
@@ -244,11 +252,18 @@ void activity_monitor_start() {
 
 void activity_monitor_stop() {
   if (activity_monitor_running) {
-    debug(2, "activity_monitor_stop begin. state: %d, player_state: %d.", state, player_state);
-    if ((state == am_active) || (state == am_timing_out)) {
-      going_inactive(config.cmd_blocking);
+    pthread_mutex_lock(&activity_monitor_mutex);
+    enum am_state state_at_stop = state;
+    enum ps_state player_state_at_stop = player_state;
+    debug(2, "activity_monitor_stop begin. state: %d, player_state: %d.", state_at_stop,
+          player_state_at_stop);
+    if ((state_at_stop == am_active) || (state_at_stop == am_timing_out))
       state = am_inactive;
-    }
+    pthread_mutex_unlock(&activity_monitor_mutex);
+
+    if ((state_at_stop == am_active) || (state_at_stop == am_timing_out))
+      going_inactive(config.cmd_blocking);
+
     pthread_cancel(activity_monitor_thread);
     pthread_join(activity_monitor_thread, NULL);
     debug(2, "activity_monitor_stop complete");

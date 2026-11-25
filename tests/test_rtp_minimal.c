@@ -29,6 +29,23 @@ static void test_rtp_initialise_and_terminate(void **state) {
   rtp_terminate(&conn);
 }
 
+static void test_rtp_terminate_while_running_keeps_mutex_valid(void **state) {
+  (void)state;
+  rtsp_conn_info conn;
+  memset(&conn, 0, sizeof(conn));
+
+  rtp_initialise(&conn);
+  conn.rtp_running = 1;
+
+  // Termination should be a no-op while running and must not destroy the mutex.
+  rtp_terminate(&conn);
+  assert_int_equal(pthread_mutex_lock(&conn.reference_time_mutex), 0);
+  assert_int_equal(pthread_mutex_unlock(&conn.reference_time_mutex), 0);
+
+  conn.rtp_running = 0;
+  rtp_terminate(&conn);
+}
+
 static void test_ntp_conversion_round_trip(void **state) {
   (void)state;
   rtsp_conn_info conn;
@@ -258,9 +275,15 @@ static void test_set_and_reset_ptp_anchor_info(void **state) {
   assert_int_equal(conn.anchor_time, 2000ULL);
 
   conn.last_anchor_info_is_valid = 1;
+  conn.long_time_notification_done = 1;
+  conn.previous_ptp_offset = 123;
+  conn.previous_ptp_clock_id = 456;
   reset_ptp_anchor_info(&conn);
   assert_int_equal(conn.anchor_remote_info_is_valid, 0);
   assert_int_equal(conn.last_anchor_info_is_valid, 0);
+  assert_int_equal(conn.long_time_notification_done, 0);
+  assert_int_equal(conn.previous_ptp_offset, 0);
+  assert_int_equal(conn.previous_ptp_clock_id, 0);
 }
 
 static void test_get_ptp_anchor_local_time_info_clock_ok(void **state) {
@@ -299,6 +322,7 @@ static int setup(void **state) {
 int main(void) {
   const struct CMUnitTest tests[] = {
       cmocka_unit_test_setup(test_rtp_initialise_and_terminate, setup),
+      cmocka_unit_test_setup(test_rtp_terminate_while_running_keeps_mutex_valid, setup),
       cmocka_unit_test_setup(test_ntp_conversion_round_trip, setup),
       cmocka_unit_test_setup(test_reset_anchor_info_clears_ntp_validity, setup),
       cmocka_unit_test_setup(test_rtp_setup_marks_running_and_binds_ports, setup),

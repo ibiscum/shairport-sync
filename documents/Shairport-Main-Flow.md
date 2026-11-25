@@ -162,6 +162,21 @@ On controlled exit, [shairport.c](../shairport.c) attempts shutdown in dependenc
 
 This minimizes dangling threads and partially torn-down services.
 
+## mDNS Contract Notes
+
+The TinySVCmDNS path relies on a few data-shape guarantees that are now explicitly enforced:
+
+- PTR target selection is null-safe: missing PTR target names are treated as absent data, not as a hard failure.
+- DNS labels are canonicalized to lowercase when name labels are created or parsed, and name comparison is case-insensitive.
+- The DNS class value and cache-flush flag are represented separately, which keeps wire encoding/decoding behavior explicit.
+
+These constraints reduce crashes caused by malformed or partial records and keep DNS matching behavior consistent with protocol expectations.
+
+Regression coverage for these guarantees is provided by:
+
+- [tests/test_tinysvcmdns_regression.c](../tests/test_tinysvcmdns_regression.c) for PTR target-name safety.
+- [tests/test_tinysvcmdns_labels_regression.c](../tests/test_tinysvcmdns_labels_regression.c) for DNS label normalization and case-insensitive comparison.
+
 ## Why This File Matters
 
 [shairport.c](../shairport.c) is the integration boundary for nearly every major subsystem. Changes here affect startup behavior, service-mode compatibility, process lifecycle correctness, and operational safety during shutdown.

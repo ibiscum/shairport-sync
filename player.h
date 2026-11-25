@@ -1,5 +1,5 @@
-#ifndef _PLAYER_H
-#define _PLAYER_H
+#ifndef PLAYER_H
+#define PLAYER_H
 
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -133,7 +133,6 @@ typedef enum {
   clock_version_mismatch,
   clock_not_synchronised,
   clock_not_valid,
-  clock_not_ready,
 } clock_status_t;
 
 typedef uint16_t seq_t;
@@ -411,7 +410,7 @@ typedef struct {
 
   airplay_stream_c
       airplay_stream_category; // is it a remote control stream or a normal "full service" stream?
-                               // (will be unspecified if not build for AirPlay 2)
+                   // (will be unspecified if not built for AirPlay 2)
 
 #ifdef CONFIG_AIRPLAY_2
   plist_t sessionPlist;
@@ -436,6 +435,9 @@ typedef struct {
   uint64_t last_anchor_local_time;
   uint64_t last_anchor_time_of_update;
   uint64_t last_anchor_validity_start_time;
+  int long_time_notification_done;
+  uint64_t previous_ptp_offset;
+  uint64_t previous_ptp_clock_id;
 
   int ap2_immediate_flush_requested;
   uint32_t ap2_immediate_flush_until_rtp_timestamp;
@@ -524,7 +526,7 @@ typedef struct {
   // The "deficit" can readily be kept up to date and can be always added to the
   // DAC buffer delay to exactly compensate for the
 
-  SwrContext *swr; // this will do transcoding anf resampling, if necessary, just prior to output
+  SwrContext *swr; // this will do transcoding and resampling, if necessary, just prior to output
   int ffmpeg_decoding_chain_initialised;
   int64_t resampler_output_channels;
   int resampler_output_bytes_per_sample;
@@ -603,7 +605,6 @@ int player_stop(rtsp_conn_info *conn);
 void player_volume(double f, rtsp_conn_info *conn);
 void player_volume_without_notification(double f, rtsp_conn_info *conn);
 void player_flush(uint32_t timestamp, rtsp_conn_info *conn);
-// void player_full_flush(rtsp_conn_info *conn);
 
 seq_t get_revised_seqno(rtsp_conn_info *conn, uint32_t timestamp);
 void clear_buffers_from(rtsp_conn_info *conn, seq_t from_here);
@@ -629,4 +630,4 @@ int ssrc_is_aac(ssrc_t ssrc); // used to decide if a mute might be needed (AAC o
 void prepare_decoding_chain(rtsp_conn_info *conn, ssrc_t ssrc); // also sets up timing stuff
 void clear_decoding_chain(rtsp_conn_info *conn);                // tear down the decoding chain
 
-#endif //_PLAYER_H
+#endif // PLAYER_H
