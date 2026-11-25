@@ -1,5 +1,5 @@
 // This file is the concatenation of mdnsd.c and mdns.c
-// from tinysvcmdns with minor modifications
+// from tinysvcmdns with modifications
 // The code was taken from https://bitbucket.org/geekman/tinysvcmdns at revision e34b562
 
 /*
@@ -541,7 +541,11 @@ struct rr_entry *rr_create_aaaa(uint8_t *name, struct in6_addr *addr) {
   DECL_MALLOC_ZERO_STRUCT(rr, rr_entry);
   if (rr) {
     FILL_RR_ENTRY(rr, name, RR_AAAA);
-    rr->data.AAAA.addr = addr;
+    // keep a copy: rr_entry_destroy() frees it, as for a parsed record
+    rr->data.AAAA.addr = malloc(sizeof(struct in6_addr));
+    if (rr->data.AAAA.addr == NULL)
+      die("could not allocate an AAAA address in tinysvcmdns.c.");
+    *rr->data.AAAA.addr = *addr;
     rr->ttl = DEFAULT_TTL_FOR_RECORD_WITH_HOSTNAME; // 120 seconds -- see RFC 6762 Section 10
   } else {
     die("could not allocate an RR 2 data structure in tinysvcmdns.c.");
@@ -1298,6 +1302,15 @@ static int create_recv_sock() {
   // enable loopback in case someone else needs the data
   if ((r = setsockopt(sd, IPPROTO_IP, IP_MULTICAST_LOOP, (char *)&on, sizeof(on))) < 0) {
     log_message(LOG_ERR, "recv setsockopt(IP_MULTICAST_LOOP): %m");
+    return r;
+  }
+
+  // RFC 6762 section 11 recommends an IP TTL of 255 for mDNS responses.
+  // The default multicast TTL is usually 1, which some access points discard.
+  unsigned char multicast_ttl = 255;
+  if ((r = setsockopt(sd, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&multicast_ttl,
+                      sizeof(multicast_ttl))) < 0) {
+    log_message(LOG_ERR, "recv setsockopt(IP_MULTICAST_TTL): %m");
     return r;
   }
 

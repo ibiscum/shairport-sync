@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "config.h"
 
 #include "common.h"
 #include "player.h"
@@ -19,8 +18,14 @@
 #include "dacp.h"
 #endif
 
+#include "remote/remote.h"
+
+typedef struct {
+  const char *name;
+  const simple_command_t command;
+} command_translator_t;
+
 #include "metadata/core.h"
-#include "metadata/hub.h"
 #include "metadata/pc_queue.h"
 
 #include "mqtt.h"
@@ -116,69 +121,72 @@ void on_message(__attribute__((unused)) struct mosquitto *mosq,
   debug(2, "[MQTT]: received Message on topic %s: %s\n", msg->topic, command);
 
   // All recognized commands
-  char *commands[] = {"command",    "beginff",  "beginrew",   "mutetoggle",
-                      "nextitem",   "previtem", "pause",      "playpause",
-                      "play",       "stop",     "playresume", "shuffle_songs",
-                      "volumedown", "volumeup", "disconnect", "queue_next",
-                      NULL};
+  command_translator_t commands[] = {
+      {"command", rcsc_command},
+      {"beginff", rcsc_fast_forward},
+      {"beginrew", rcsc_rewind},
+      {"nextitem", rcsc_next_item},
+      {"previtem", rcsc_previous_item},
+      {"pause", rcsc_pause},
+      {"playpause", rcsc_play_pause},
+      {"play", rcsc_play},
+      {"stop", rcsc_stop},
+      {"shuffle_songs", rcsc_toggle_shuffle},
+      {"volumedown", rcsc_volume_down},
+      {"volumeup", rcsc_volume_up},
+      {"disconnect", rcsc_disconnect},
+
+// these are only implemented in the DACP client, not in AirPlay 2
+#ifdef CONFIG_DACP_CLIENT
+      {"playresume", rcsc_play_resume},
+      {"mutetoggle", rcsc_mute_toggle},
+      {"queue_next", rcsc_queue_next},
+#endif
+      {NULL, rcsc_not_a_command},
+  };
 
   int it = 0;
-
-  // send command if it's a valid one
-  while (commands[it] != NULL) {
-    if (strcmp(command, commands[it]) == 0) {
-      debug(2, "[MQTT]: Received Recognized Command: %s\n", commands[it]);
-      if (strcmp(commands[it], "disconnect") == 0) {
-        debug(2, "[MQTT]: Disconnect Command: %s\n", commands[it]);
-        stop_play(); // stop any current session and don't replace it
-      } else if (strcmp(commands[it], "queue_next") == 0) {
-        warn("[MQTT]: queue_next command requires a track_id argument");
-      } else {
-        debug(2, "[MQTT]: DACP Command: %s\n", commands[it]);
-#ifdef CONFIG_DACP_CLIENT
-        send_simple_dacp_command(commands[it]);
-#else
-        warn("[MQTT]: command \"%s\" ignored because DACP client support is disabled", commands[it]);
-#endif
-      }
-      break;
-    }
-    it++;
+  int found = 0;
+  while ((commands[it].name != NULL) && (found == 0)) {
+    found = ((size_t)msg->payloadlen >= strlen(commands[it].name) &&
+             strncmp(msg->payload, commands[it].name, strlen(commands[it].name)) == 0);
+    if (found == 0)
+      it++;
   }
-
-  if (strncmp(command, "queue_next", strlen("queue_next")) == 0) {
-    char next = command[strlen("queue_next")];
-    if ((next == ' ') || (next == '\t')) {
-      // command format is "queue_next <track_id>", where <track_id> is the hex track_id
-      // string as published by shairport-sync itself.
-      char *track_id = command + strlen("queue_next");
-      while ((*track_id == ' ') || (*track_id == '\t'))
-        track_id++;
-      size_t track_id_len = strlen(track_id);
-      while ((track_id_len > 0) && isspace((unsigned char)track_id[track_id_len - 1]))
-        track_id[--track_id_len] = '\0';
-      if (track_id_len == 0) {
-        warn("[MQTT]: queue_next command received with no track_id -- ignoring.");
-      } else {
-        char dacp_command[256];
-        snprintf(dacp_command, sizeof(dacp_command),
-                 "cue?command=add&query='dmap.persistentid:0x%s'&mode=3", track_id);
-        debug(2, "[MQTT]: Queue Next Command: %s\n", dacp_command);
-#ifdef CONFIG_DACP_CLIENT
-        send_simple_dacp_command(dacp_command);
-#else
-        warn("[MQTT]: queue_next ignored because DACP client support is disabled");
-#endif
-      }
-      free(payload);
-      return;
-    }
+  if (commands[it].name != NULL) {
+    debug(2, "[MQTT]: Received Recognized Command: %s\n", commands[it].name);
   }
-
-  if (commands[it] == NULL)
-    debug(2, "[MQTT]: Unrecognised command payload ignored: %s", command);
-
-  free(payload);
+  // send command
+  switch (commands[it].command) {
+#ifdef CONFIG_DACP_CLIENT
+  case rcsc_queue_next: {
+    // payload is "queue_next <track_id>", where <track_id> is the hex track_id
+    // string as published by shairport-sync itself (see the "mper"/"track_id" handling
+    // above), e.g. "queue_next 1A2B3C4D5E6F7"
+    char *track_id = payload + strlen(commands[it].name);
+    while (*track_id == ' ' || *track_id == '\t')
+      track_id++;
+    size_t track_id_len = strlen(track_id);
+    while (track_id_len > 0 && isspace((unsigned char)track_id[track_id_len - 1]))
+      track_id[--track_id_len] = '\0';
+    if (track_id_len == 0) {
+      warn("[MQTT]: queue_next command received with no track_id -- ignoring.");
+    } else {
+      char dacp_command[256];
+      snprintf(dacp_command, sizeof(dacp_command),
+               "cue?command=add&query='dmap.persistentid:0x%s'&mode=3", track_id);
+      debug(2, "[MQTT]: Calling \"Queue Next\" Command via DACP: %s\n", dacp_command);
+      send_simple_dacp_command(dacp_command);
+    }
+  } break;
+#endif
+  default:
+    if (commands[it].name != NULL) {
+      debug(2, "[MQTT]: Calling Remote Command: %s\n", commands[it].name);
+      remote_simple_command(commands[it].command);
+    }
+    break;
+  }
 }
 
 void on_disconnect(__attribute__((unused)) struct mosquitto *mosq,
@@ -420,6 +428,10 @@ void mqtt_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t le
       case 'asal':
         mqtt_publish("album", data, length);
         break;
+      case 'asdk':
+        mqtt_publish("songdatakind", data,
+                     length); // 0 seem to be a timed item, 1 an untimed stream
+        break;
       case 'asfm':
         mqtt_publish("format", data, length);
         break;
@@ -450,13 +462,6 @@ void mqtt_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t le
       case 'aend':
         mqtt_publish("active", "0", 1);
         mqtt_publish("active_end", data, length);
-        break;
-      case 'asal':
-        mqtt_publish("songalbum", data, length);
-        break;
-      case 'asdk':
-        mqtt_publish("songdatakind", data,
-                     length); // 0 seem to be a timed item, 1 an untimed stream
         break;
       case 'clip':
         mqtt_publish("client_ip", data, length);
@@ -612,18 +617,16 @@ void *metadata_mqtt_thread_function(__attribute__((unused)) void *ignore) {
   while (1) {
     pc_queue_get_item(&metadata_mqtt_queue, &pack);
     pthread_cleanup_push(metadata_pack_cleanup_function, (void *)&pack);
+    if (pack.carrier) {
+      debug(3, "mqtt: type " MULTICHAR4_FMT ", code " MULTICHAR4_FMT ", length %u, message %d.",
+            MULTICHAR4_ARGS(pack.type), MULTICHAR4_ARGS(pack.code), pack.length, pack.carrier->index_number);
+    } else {
+      debug(3, "mqtt: type " MULTICHAR4_FMT ", code " MULTICHAR4_FMT ", length %u.",
+            MULTICHAR4_ARGS(pack.type), MULTICHAR4_ARGS(pack.code), pack.length);
+    }
     if (config.mqtt_enabled) {
-      if (pack.carrier) {
-        debug(3,
-              "                                        mqtt: type %x, code %x, length %u, message "
-              "%d.",
-              pack.type, pack.code, pack.length, pack.carrier->index_number);
-      } else {
-        debug(3, "                                        mqtt: type %x, code %x, length %u.",
-              pack.type, pack.code, pack.length);
-      }
       mqtt_process_metadata(pack.type, pack.code, pack.data, pack.length);
-      debug(3, "                                        mqtt: done.");
+      debug(3, "mqtt: done.");
     }
 
     pthread_cleanup_pop(1);

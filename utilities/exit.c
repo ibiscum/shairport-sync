@@ -22,17 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
 // exit_init() starts a thread what waits for the exit_request_flag to
 // be set to non-zero.
 // It then runs the standard exit(exit_status) to
 // terminate the program, running all the atexit handlers first.
 
-// exit_request() can be called from anywhere in the program 
-// including a SIG handler and 
+// exit_request() can be called from anywhere in the program
+// including a SIG handler and
 // the thread will take care of terminating the program cleanly.
 // pass in EXIT_SUCCESS or EXIT_FAILURE in the request.
 
+#include <pthread.h>
 #include <signal.h> // for sig_atomic_t
 #include <stdlib.h> // for EXIT_SUCCESS
 #include <string.h> // for memset
@@ -42,8 +42,8 @@ SOFTWARE.
 #include <sys/eventfd.h>
 #include <pthread.h>
 
-#include "exit.h"
 #include "common.h"
+#include "exit.h"
 
 volatile sig_atomic_t exit_request_flag = 0;
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
@@ -53,6 +53,15 @@ static int exit_wakeup_fd = -1;
 pthread_t exit_manager_thread;
 
 void *exit_manager(__attribute__((unused)) void *arg) {
+  while (exit_request_flag == 0) {
+    uint64_t last = get_absolute_time_in_ns();
+    usleep(10000);
+    if (exit_request_flag == 0) {
+      uint64_t now = get_absolute_time_in_ns();
+      if ((now - last) > (uint64_t)100000000) {
+        debug(2, "heartbeat: slept %.1f ms instead of 10.0.", (now - last) * 1E-6);
+      }
+    }
   while(exit_request_flag == 0) {
     if (exit_wakeup_fd >= 0) {
       uint64_t wakeup_count;
@@ -93,6 +102,7 @@ void exit_init() {
 
 void exit_request(const int exit_status_requested) {
   exit_status = exit_status_requested; // EXIT_SUCCESS or EXIT_FAILURE
+  exit_request_flag = 1;               // ask for exit
   exit_request_flag = 1; // ask for exit
   if (exit_wakeup_fd >= 0) {
     uint64_t increment = 1;

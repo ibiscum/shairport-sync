@@ -40,6 +40,7 @@
 #include "FFTConvolver/convolver.h"
 #endif
 
+
 void addADTStoPacket(uint8_t *packet, int packetLen, int rate, int channel_configuration) {
   // https://stackoverflow.com/questions/18862715/how-to-generate-the-aac-adts-elementary-stream-with-android-mediacodec
   // with thanks!
@@ -102,9 +103,7 @@ void rtp_buffered_audio_cleanup_handler(__attribute__((unused)) void *arg) {
 
 void *rtp_buffered_audio_processor(void *arg) {
   rtsp_conn_info *conn = (rtsp_conn_info *)arg;
-  // #include <syscall.h>
-  // debug(1, "Connection %d: rtp_buffered_audio_processor PID %d start", conn->connection_number,
-  //         syscall(SYS_gettid));
+
   conn->incoming_ssrc = 0; // reset
   conn->resampler_ssrc = 0;
 
@@ -185,7 +184,7 @@ void *rtp_buffered_audio_processor(void *arg) {
   unsigned char *payload_pointer = NULL;
   unsigned long long payload_length = 0;
   uint32_t payload_ssrc =
-      SSRC_NONE; // this is the SSRC of the payload, needed to decide if it should be muted
+      SSRC_NONE; // this is the SSRC of the payload
   uint32_t previous_ssrc = SSRC_NONE;
 
   uint32_t seq_no =
@@ -234,6 +233,11 @@ void *rtp_buffered_audio_processor(void *arg) {
 
     if ((play_enabled != 0) && (conn->ap2_play_enabled == 0)) {
       debug(2, "Play stopped.");
+#ifdef CONFIG_METADATA
+      pthread_mutex_lock_and_cleanup_push(&conn->flush_mutex);
+      reset_input_bitrate(conn);
+      pthread_cleanup_pop(1);
+#endif
       packets_played_in_this_sequence = 0; // not all blocks read are played...
       previous_buffer_should_be_time = 0;
 #ifdef CONFIG_CONVOLUTION
@@ -339,7 +343,7 @@ void *rtp_buffered_audio_processor(void *arg) {
                 debug(2, "reading block %u, the timestamp %u differs from expected_timestamp %u.",
                       seq_no, timestamp, t_expected_timestamp);
               }
-            }
+            }          
           }
         }
       }
@@ -371,34 +375,56 @@ void *rtp_buffered_audio_processor(void *arg) {
       pthread_mutex_lock_and_cleanup_push(&conn->flush_mutex);
       if (blocks_read != 0) {
         if (conn->ap2_immediate_flush_requested != 0) {
+          int flush_finished = 0;
           if (ap2_immediate_flush_requested == 0) {
-            debug(2, "immediate flush started at sequence number %u until sequence number of %u.",
+#ifdef CONFIG_METADATA
+            reset_input_bitrate(conn);
+#endif
+            debug(3, "immediate flush started at sequence number %u until sequence number of %u.",
                   seq_no, conn->ap2_immediate_flush_until_sequence_number);
           }
-          if ((blocks_read != 0) &&
-              ((a_minus_b_mod23(seq_no, conn->ap2_immediate_flush_until_sequence_number) > 0))) {
-
-            if (payload_ssrc == SSRC_NONE) {
-              debug(2,
-                    "immediate flush endpoint followed by a SSRC_NONE packet. Seq_no is %u, "
-                    "conn->ap2_immediate_flush_until_sequence_number is %u.",
-                    seq_no, conn->ap2_immediate_flush_until_sequence_number);
-
-            } else {
-              debug(1,
-                    "immediate flush may have escaped its endpoint! Seq_no is %u, "
-                    "conn->ap2_immediate_flush_until_sequence_number is %u.",
-                    seq_no, conn->ap2_immediate_flush_until_sequence_number);
+          
+          if (conn->ap2_immediate_flush_until_sequence_number != 0) {
+            if (a_minus_b_mod23(seq_no, conn->ap2_immediate_flush_until_sequence_number) > 0) {
+              if (payload_ssrc == SSRC_NONE) {
+                debug(3,
+                      "immediate flush endpoint followed by a SSRC_NONE packet. Seq_no is %u, "
+                      "conn->ap2_immediate_flush_until_sequence_number is %u.",
+                      seq_no, conn->ap2_immediate_flush_until_sequence_number);
+  
+              } else {
+                debug(3,
+                      "immediate flush may have escaped its endpoint! Seq_no is %u, "
+                      "conn->ap2_immediate_flush_until_sequence_number is %u.",
+                      seq_no, conn->ap2_immediate_flush_until_sequence_number);
+              }
+              flush_finished = 1;
             }
+  
+            if (a_minus_b_mod23(seq_no, conn->ap2_immediate_flush_until_sequence_number) >= 0) {
+              debug(3,
+                    "immediate flush completed at seq_no: %u, "
+                    "conn->ap2_immediate_flush_until_sequence_number: %u.",
+                    seq_no, conn->ap2_immediate_flush_until_sequence_number);
+              flush_finished = 1;
+            }
+          } else {
+            flush_finished = 1;
+          // A flush to Block 0 looks like a bug in HomePod OS 27.
+          /*
+            // look at the flushUntilTS and the present one
+            int32_t timestamp_difference = conn->ap2_immediate_flush_until_rtp_timestamp - timestamp;
+            debug(1, "ap2_immediate_flush_until_timestamp %u and current timestamp %u difference %d.",
+              conn->ap2_immediate_flush_until_rtp_timestamp,
+              timestamp,
+              timestamp_difference);
+            if (timestamp_difference <= 0) {
+              flush_finished = 1;
+            }
+          */
           }
-
-          if ((blocks_read != 0) &&
-              ((a_minus_b_mod23(seq_no, conn->ap2_immediate_flush_until_sequence_number) >= 0))) {
-            debug(2,
-                  "immediate flush completed at seq_no: %u, "
-                  "conn->ap2_immediate_flush_until_sequence_number: %u.",
-                  seq_no, conn->ap2_immediate_flush_until_sequence_number);
-
+          
+          if (flush_finished != 0) {
             conn->ap2_immediate_flush_requested = 0;
             ap2_immediate_flush_requested = 0;
             // debug(1, "flushed to %u, requested %u.", seq_no,
@@ -409,7 +435,7 @@ void *rtp_buffered_audio_processor(void *arg) {
             for (f = 0; f < MAX_DEFERRED_FLUSH_REQUESTS; f++) {
               if ((conn->ap2_deferred_flush_requests[f].inUse != 0) &&
                   (conn->ap2_deferred_flush_requests[f].active == 0)) {
-                debug(1,
+                debug(3,
                       "deferred flush cancelled by an immediate flush:  flushFromTS: %12u, "
                       "flushFromSeq: %12u, "
                       "flushUntilTS: %12u, flushUntilSeq: %12u, timestamp: %12u.",
@@ -423,7 +449,7 @@ void *rtp_buffered_audio_processor(void *arg) {
             }
 
           } else {
-            debug(4, "immediate flush of block %u until block %u", seq_no,
+            debug(3, "immediate flush of block %u until block %u", seq_no,
                   conn->ap2_immediate_flush_until_sequence_number);
             ap2_immediate_flush_requested = 1;
             new_audio_block_needed = 1; //
@@ -439,18 +465,21 @@ void *rtp_buffered_audio_processor(void *arg) {
         if (conn->ap2_deferred_flush_requests[f].inUse != 0) {
           if ((conn->ap2_deferred_flush_requests[f].flushFromSeq == seq_no) &&
               (conn->ap2_deferred_flush_requests[f].flushUntilSeq != seq_no)) {
-            debug(2,
+            debug(3,
                   "deferred flush activated:  flushFromTS: %12u, flushFromSeq: %12u, "
                   "flushUntilTS: %12u, flushUntilSeq: %12u, timestamp: %12u.",
                   conn->ap2_deferred_flush_requests[f].flushFromTS,
                   conn->ap2_deferred_flush_requests[f].flushFromSeq,
                   conn->ap2_deferred_flush_requests[f].flushUntilTS,
                   conn->ap2_deferred_flush_requests[f].flushUntilSeq, timestamp);
+#ifdef CONFIG_METADATA
+            reset_input_bitrate(conn);
+#endif
             conn->ap2_deferred_flush_requests[f].active = 1;
             new_audio_block_needed = 1;
           }
           if (conn->ap2_deferred_flush_requests[f].flushUntilSeq == seq_no) {
-            debug(2,
+            debug(3,
                   "deferred flush terminated: flushFromTS: %12u, flushFromSeq: %12u, "
                   "flushUntilTS: %12u, flushUntilSeq: %12u, timestamp: %12u.",
                   conn->ap2_deferred_flush_requests[f].flushFromTS,
@@ -463,7 +492,7 @@ void *rtp_buffered_audio_processor(void *arg) {
                      0) {
             // now, do a modulo 2^23 unsigned int calculation to see if we may have overshot the
             // flushUntilSeq
-            debug(2,
+            debug(3,
                   "deferred flush terminated due to overshoot at block %u: flushFromTS: %12u, "
                   "flushFromSeq: %12u, "
                   "flushUntilTS: %12u, flushUntilSeq: %12u, timestamp: %12u.",
@@ -476,7 +505,7 @@ void *rtp_buffered_audio_processor(void *arg) {
             debug(2, "immediate flush was %s.", ap2_immediate_flush_requested == 0 ? "off" : "on");
           } else if (conn->ap2_deferred_flush_requests[f].active != 0) {
             new_audio_block_needed = 1;
-            debug(4,
+            debug(3,
                   "deferred flush of block: %u, timestamp: %u, SSRC: \"%s\". flushFromTS: %12u, "
                   "flushFromSeq: %12u, "
                   "flushUntilTS: %12u, flushUntilSeq: %12u, timestamp: %12u.",
@@ -695,9 +724,11 @@ void *rtp_buffered_audio_processor(void *arg) {
                     if ((skip_this_block == 0) && (adts_too_large == 0)) {
                       uint32_t packet_size = player_put_packet(
                           payload_ssrc, sequence_number_for_player, timestamp, payload_pointer,
-                          payload_length, mute, timestamp_difference, conn);
+                          payload_length, mute, timestamp_difference, conn, seq_no);
                       debug(4, "block %u, timestamp %u, length %u sent to the player.", seq_no,
                             timestamp, packet_size);
+                      // keep the 64-bit timestamp extension reference up to date
+                      note_ptp_rtp_timestamp(conn, timestamp);
                       sequence_number_for_player++;                 // simply increment
                       expected_timestamp = timestamp + packet_size; // for the next time
                       packets_played_in_this_sequence++;
@@ -707,7 +738,7 @@ void *rtp_buffered_audio_processor(void *arg) {
                 } else {
                   debug(3,
                         "skipped deciphering block %u with timestamp %u because its lead time is "
-                        "out of range at %f "
+                        "out of range at %g "
                         "seconds.",
                         seq_no, timestamp, lead_time * 1.0E-9);
                   uint32_t currentAnchorRTP = 0;
