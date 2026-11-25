@@ -1,3 +1,9 @@
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include "mqtt.h"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -23,8 +29,15 @@ _Static_assert(
 
 #endif
 
-int main(void) {
+static void test_mqtt_header_api_contract_compiles(__attribute__((unused)) void **state) {
   struct mosquitto *client = 0;
   (void)client;
-  return 0;
+}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_mqtt_header_api_contract_compiles),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

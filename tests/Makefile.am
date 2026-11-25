@@ -1,5 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_builddir) @glib_CFLAGS@
-AM_CFLAGS = --include=$(top_builddir)/config.h --include=$(top_srcdir)/utilities/debug.h
+AM_CFLAGS = --include=$(top_builddir)/config.h --include=$(top_srcdir)/utilities/debug.h $(CMOCKA_CFLAGS)
+LDADD = $(CMOCKA_LIBS)
 
 check_PROGRAMS = \
 	test_activity_monitor \

@@ -5,6 +5,12 @@
 /* Assertions perform test setup and checks, including in -DNDEBUG builds. */
 #undef NDEBUG
 #include <assert.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -639,18 +645,68 @@ static void pipe_framing_and_write_recovery(void) {
   assert(strcmp(output, "<item><type>1</type><code>2</code><length>0</length></item>\n") == 0);
 }
 
-int main(void) {
+static void test_initialization_failure_is_fatal(__attribute__((unused)) void **state) {
   initialization_failure_is_fatal();
-  null_queue_errors();
+}
+
+static void test_null_queue_errors(__attribute__((unused)) void **state) { null_queue_errors(); }
+
+static void test_fifo_wraparound_and_contention(__attribute__((unused)) void **state) {
   fifo_wraparound_and_contention();
+}
+
+static void test_wait_error_and_cancellation(__attribute__((unused)) void **state) {
   wait_error_and_cancellation();
+}
+
+static void test_waiting_consumer_is_signalled(__attribute__((unused)) void **state) {
   waiting_consumer_is_signalled();
+}
+
+static void test_producer_cancellation_preserves_ownership(__attribute__((unused)) void **state) {
   producer_cancellation_preserves_ownership();
+}
+
+static void test_worker_exits_on_wait_error(__attribute__((unused)) void **state) {
   worker_exits_on_wait_error();
+}
+
+static void test_absent_reader_and_disabled_metadata(__attribute__((unused)) void **state) {
   absent_reader_and_disabled_metadata();
+}
+
+static void test_stalled_reader_saturation_and_recovery(__attribute__((unused)) void **state) {
   stalled_reader_saturation_and_recovery();
+}
+
+static void test_stopping_with_pending_packages(__attribute__((unused)) void **state) {
   stopping_with_pending_packages();
+}
+
+static void test_pipe_startup_failures(__attribute__((unused)) void **state) {
   pipe_startup_failures();
+}
+
+static void test_pipe_framing_and_write_recovery(__attribute__((unused)) void **state) {
   pipe_framing_and_write_recovery();
+}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_initialization_failure_is_fatal),
+      cmocka_unit_test(test_null_queue_errors),
+      cmocka_unit_test(test_fifo_wraparound_and_contention),
+      cmocka_unit_test(test_wait_error_and_cancellation),
+      cmocka_unit_test(test_waiting_consumer_is_signalled),
+      cmocka_unit_test(test_producer_cancellation_preserves_ownership),
+      cmocka_unit_test(test_worker_exits_on_wait_error),
+      cmocka_unit_test(test_absent_reader_and_disabled_metadata),
+      cmocka_unit_test(test_stalled_reader_saturation_and_recovery),
+      cmocka_unit_test(test_stopping_with_pending_packages),
+      cmocka_unit_test(test_pipe_startup_failures),
+      cmocka_unit_test(test_pipe_framing_and_write_recovery),
+  };
+
   puts("Metadata delivery passed: absent/stalled reader, bounded saturation, cleanup and recovery.");
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

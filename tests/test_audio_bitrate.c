@@ -1,6 +1,12 @@
 /* Keep meter operations and checks active with release build flags. */
 #undef NDEBUG
 #include <assert.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include <stdio.h>
 #include <string.h>
 #include "metadata/audio_bitrate.h"
@@ -22,7 +28,7 @@ static void destroy_conn_mutexes(rtsp_conn_info *conn) {
   assert(!pthread_mutex_destroy(&conn->flush_mutex));
 }
 
-int main(void) {
+static void test_audio_bitrate_regression(__attribute__((unused)) void **state) {
   audio_bitrate_meter meter = {0};
   unsigned reports = 0;
   for (unsigned i = 0; i < 141; i++)
@@ -183,4 +189,12 @@ int main(void) {
 
   config.bitrate_stats_interval = 1.25;
   printf("Audio bitrate tests passed; persistent state=%zu bytes\n", sizeof(meter));
+}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_audio_bitrate_regression),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

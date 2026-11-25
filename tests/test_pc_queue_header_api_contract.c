@@ -1,3 +1,9 @@
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include "metadata/pc_queue.h"
 
 typedef void (*init_signature)(pc_queue *, char *, size_t, uint32_t, const char *);
@@ -14,4 +20,12 @@ _Static_assert(__builtin_types_compatible_p(__typeof__(&pc_queue_add_item), add_
 _Static_assert(__builtin_types_compatible_p(__typeof__(&pc_queue_get_item), get_signature),
                "pc_queue_get_item signature changed");
 
-int main(void) { return 0; }
+static void test_pc_queue_header_api_contract_compiles(__attribute__((unused)) void **state) {}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_pc_queue_header_api_contract_compiles),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}

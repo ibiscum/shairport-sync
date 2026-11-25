@@ -1,3 +1,9 @@
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include "metadata/metadata_hub_handle_command_plist.h"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -15,4 +21,13 @@ _Static_assert(
     "metadata_hub_handle_command_plist signature drifted from metadata_hub_handle_command_plist.h contract");
 #endif
 
-int main(void) { return 0; }
+static void test_metadata_hub_handle_command_plist_header_api_contract_compiles(
+    __attribute__((unused)) void **state) {}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_metadata_hub_handle_command_plist_header_api_contract_compiles),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}

@@ -3,8 +3,8 @@
 ## Autotools tests
 
 Run `make check` after configuring the project. The root Makefile runs the
-standalone tests; `--with-cmocka-tests` also enables the CMocka tests in this
-directory and the CLI regression test, which runs the built `shairport-sync`.
+standalone tests and the CMocka tests in this directory, including the CLI
+regression test that runs the built `shairport-sync`.
 
 ## Standalone RTP minimal suite
 

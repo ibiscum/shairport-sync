@@ -81,11 +81,11 @@ Timestamps are referenced relative to the source computer's clock – the "sourc
 ## Example configurations
 
 ```bash
-./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire
+./configure --with-ssl=openssl --with-pkg-config --with-avahi --with-alsa --with-pipewire
 
-./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire --with-airplay-2
+./configure --with-ssl=openssl --with-pkg-config --with-avahi --with-alsa --with-pipewire --with-airplay-2
 
-./configure --with-ssl=openssl --with-pkg-config --with-airplay-2 --with-alsa --with-avahi --with-cmocka-tests --with-pipe --with-metadata --with-dbus-interface --with-dbus-test-client
+./configure --with-ssl=openssl --with-pkg-config --with-airplay-2 --with-alsa --with-avahi --with-pipe --with-metadata --with-dbus-interface --with-dbus-test-client
 ```
 
 ### Note on `pipe` output format/rate

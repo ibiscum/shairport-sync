@@ -3,6 +3,12 @@
 
 #include <assert.h>
 #include <arpa/inet.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,7 +20,15 @@
 #include "metadata/pc_queue.h"
 
 #ifndef CONFIG_METADATA_HUB
-int main(void) { return 0; }
+static void test_metadata_hub_disabled_build(__attribute__((unused)) void **state) {}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_metadata_hub_disabled_build),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}
 #else
 
 shairport_cfg config;
@@ -62,7 +76,7 @@ static void reset_state(void) {
   metadata_hub_init();
 }
 
-static void test_assc_updates_sort_composer_only(void) {
+static void test_assc_updates_sort_composer_only(__attribute__((unused)) void **state) {
   char composer[] = "Composer";
   char sort_composer[] = "Sort Composer";
 
@@ -80,7 +94,7 @@ static void test_assc_updates_sort_composer_only(void) {
   assert(strcmp(metadata_store.npi.sort_composer, "Sort Composer") == 0);
 }
 
-static void test_short_core_payloads_do_not_mutate_state(void) {
+static void test_short_core_payloads_do_not_mutate_state(__attribute__((unused)) void **state) {
   char three_bytes[] = {0x00, 0x01, 0x02};
   char one_byte[] = {0x55};
 
@@ -107,7 +121,7 @@ static void test_short_core_payloads_do_not_mutate_state(void) {
   assert(metadata_store.npi.track_number.value == 7);
 }
 
-static void test_picture_write_failure_does_not_store_null_uri(void) {
+static void test_picture_write_failure_does_not_store_null_uri(__attribute__((unused)) void **state) {
   char fake_image[20];
   memset(fake_image, 0x11, sizeof(fake_image));
 
@@ -117,7 +131,7 @@ static void test_picture_write_failure_does_not_store_null_uri(void) {
   assert(metadata_store.npi.cover_art_pathname == NULL);
 }
 
-static void test_mdst_mden_new_track_replaces_npi(void) {
+static void test_mdst_mden_new_track_replaces_npi(__attribute__((unused)) void **state) {
   unsigned char id1[8];
   unsigned char id2[8];
   char old_title[] = "Old";
@@ -148,7 +162,8 @@ static void test_mdst_mden_new_track_replaces_npi(void) {
   assert(strcmp(metadata_store.npi.track_name, "New") == 0);
 }
 
-static void test_send_metadata_to_hub_queue_forwards_parameters(void) {
+static void test_send_metadata_to_hub_queue_forwards_parameters(
+    __attribute__((unused)) void **state) {
   rtsp_message carrier = {0};
 
   reset_state();
@@ -167,12 +182,15 @@ static void test_send_metadata_to_hub_queue_forwards_parameters(void) {
 }
 
 int main(void) {
-  test_assc_updates_sort_composer_only();
-  test_short_core_payloads_do_not_mutate_state();
-  test_picture_write_failure_does_not_store_null_uri();
-  test_mdst_mden_new_track_replaces_npi();
-  test_send_metadata_to_hub_queue_forwards_parameters();
-  return 0;
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_assc_updates_sort_composer_only),
+      cmocka_unit_test(test_short_core_payloads_do_not_mutate_state),
+      cmocka_unit_test(test_picture_write_failure_does_not_store_null_uri),
+      cmocka_unit_test(test_mdst_mden_new_track_replaces_npi),
+      cmocka_unit_test(test_send_metadata_to_hub_queue_forwards_parameters),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }
 
 int parse_prlg(__attribute__((unused)) const char *str, __attribute__((unused)) uint32_t *a,

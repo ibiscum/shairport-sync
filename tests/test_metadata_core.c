@@ -3,6 +3,12 @@
 #define _POSIX_C_SOURCE 200809L
 #undef NDEBUG
 #include <assert.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -110,7 +116,7 @@ static void reset_counters(void) {
   pipe_last_type = pipe_last_code = 0;
 }
 
-static void test_init_stop_idempotence(void) {
+static void test_init_stop_idempotence(__attribute__((unused)) void **state) {
   reset_counters();
   metadata_running = 0;
   metadata_init();
@@ -128,7 +134,7 @@ static void test_init_stop_idempotence(void) {
   assert(mqtt_stop_calls == 1);
 }
 
-static void test_send_metadata_disabled_does_not_fanout(void) {
+static void test_send_metadata_disabled_does_not_fanout(__attribute__((unused)) void **state) {
   reset_counters();
   config.metadata_enabled = 0;
   assert(send_metadata(METADATA_FOURCC('s', 's', 'n', 'c'),
@@ -137,7 +143,7 @@ static void test_send_metadata_disabled_does_not_fanout(void) {
   config.metadata_enabled = 1;
 }
 
-static void test_send_metadata_first_error_wins(void) {
+static void test_send_metadata_first_error_wins(__attribute__((unused)) void **state) {
   reset_counters();
   config.metadata_enabled = 1;
   pipe_send_rc = 0;
@@ -148,7 +154,7 @@ static void test_send_metadata_first_error_wins(void) {
   assert(pipe_send_calls == 1 && multicast_send_calls == 1 && mqtt_send_calls == 1);
 }
 
-static void test_send_ssnc_metadata_sets_ssnc_type(void) {
+static void test_send_ssnc_metadata_sets_ssnc_type(__attribute__((unused)) void **state) {
   reset_counters();
   config.metadata_enabled = 1;
   assert(send_ssnc_metadata(METADATA_FOURCC('a', 'b', 'r', 't'), "x", 1, 0) == 0);
@@ -157,7 +163,7 @@ static void test_send_ssnc_metadata_sets_ssnc_type(void) {
   assert(pipe_last_code == METADATA_FOURCC('a', 'b', 'r', 't'));
 }
 
-static void test_send_metadata_to_queue_invalid_null_data(void) {
+static void test_send_metadata_to_queue_invalid_null_data(__attribute__((unused)) void **state) {
   pc_queue queue;
   metadata_package storage[1];
   pc_queue_init(&queue, (char *)storage, sizeof(metadata_package), 1, "core-regression");
@@ -168,7 +174,7 @@ static void test_send_metadata_to_queue_invalid_null_data(void) {
   pc_queue_delete(&queue);
 }
 
-static void test_carrier_retain_release_paths(void) {
+static void test_carrier_retain_release_paths(__attribute__((unused)) void **state) {
   pc_queue queue;
   metadata_package storage[1];
   metadata_package item;
@@ -200,11 +206,15 @@ static void test_carrier_retain_release_paths(void) {
 }
 
 int main(void) {
-  test_init_stop_idempotence();
-  test_send_metadata_disabled_does_not_fanout();
-  test_send_metadata_first_error_wins();
-  test_send_ssnc_metadata_sets_ssnc_type();
-  test_send_metadata_to_queue_invalid_null_data();
-  test_carrier_retain_release_paths();
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_init_stop_idempotence),
+      cmocka_unit_test(test_send_metadata_disabled_does_not_fanout),
+      cmocka_unit_test(test_send_metadata_first_error_wins),
+      cmocka_unit_test(test_send_ssnc_metadata_sets_ssnc_type),
+      cmocka_unit_test(test_send_metadata_to_queue_invalid_null_data),
+      cmocka_unit_test(test_carrier_retain_release_paths),
+  };
+
   puts("Metadata core tests passed: lifecycle, fanout, validation and carrier retention paths.");
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

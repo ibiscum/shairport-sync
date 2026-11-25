@@ -3,6 +3,12 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -140,7 +146,7 @@ static void reset_state(void) {
   config.metadata_sockmsglength = 64;
 }
 
-static void test_cleanup_releases_even_when_disabled(void) {
+static void test_cleanup_releases_even_when_disabled(__attribute__((unused)) void **state) {
   reset_state();
   metadata_sock = 11;
   metadata_sockmsg = malloc(32);
@@ -156,7 +162,7 @@ static void test_cleanup_releases_even_when_disabled(void) {
   assert(metadata_sockmsg == NULL);
 }
 
-static void test_unchunked_packet_format(void) {
+static void test_unchunked_packet_format(__attribute__((unused)) void **state) {
   const char payload[] = "abc";
   uint32_t type = METADATA_FOURCC('c', 'o', 'r', 'e');
   uint32_t code = METADATA_FOURCC('m', 'i', 'n', 'm');
@@ -178,7 +184,7 @@ static void test_unchunked_packet_format(void) {
   assert(memcmp(test_packets[0].data + 8, payload, strlen(payload)) == 0);
 }
 
-static void test_chunked_packet_format(void) {
+static void test_chunked_packet_format(__attribute__((unused)) void **state) {
   const char payload[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   uint32_t type = METADATA_FOURCC('c', 'o', 'r', 'e');
   uint32_t code = METADATA_FOURCC('a', 's', 't', 'm');
@@ -216,7 +222,7 @@ static void test_chunked_packet_format(void) {
   assert(memcmp(test_packets[3].data + 24, "YZ", 2) == 0);
 }
 
-static void test_invalid_sockmsglength_skips_send(void) {
+static void test_invalid_sockmsglength_skips_send(__attribute__((unused)) void **state) {
   reset_state();
   config.metadata_sockmsglength = 24;
   metadata_sock = 12;
@@ -228,7 +234,7 @@ static void test_invalid_sockmsglength_skips_send(void) {
   assert(test_sendto_calls == 0);
 }
 
-static void test_send_metadata_to_multicast_queue_forwards(void) {
+static void test_send_metadata_to_multicast_queue_forwards(__attribute__((unused)) void **state) {
   rtsp_message carrier = {0};
 
   reset_state();
@@ -247,12 +253,15 @@ static void test_send_metadata_to_multicast_queue_forwards(void) {
 }
 
 int main(void) {
-  test_cleanup_releases_even_when_disabled();
-  test_unchunked_packet_format();
-  test_chunked_packet_format();
-  test_invalid_sockmsglength_skips_send();
-  test_send_metadata_to_multicast_queue_forwards();
-  return 0;
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_cleanup_releases_even_when_disabled),
+      cmocka_unit_test(test_unchunked_packet_format),
+      cmocka_unit_test(test_chunked_packet_format),
+      cmocka_unit_test(test_invalid_sockmsglength_skips_send),
+      cmocka_unit_test(test_send_metadata_to_multicast_queue_forwards),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }
 
 int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t code,

@@ -44,17 +44,8 @@ AC_CHECK_PROGS([XMLTOMAN], [xmltoman])
 AM_CONDITIONAL([USE_XMLTOMAN], [ test -n "$XMLTOMAN" ])
 
 PKG_PROG_PKG_CONFIG([0.9.0])
-
-AC_ARG_WITH([cmocka-tests],
-  [AS_HELP_STRING([--with-cmocka-tests],[build cmocka unit tests])],
-  [],
-  [with_cmocka_tests=no])
-
-if test "x$with_cmocka_tests" = "xyes" ; then
-  PKG_CHECK_MODULES([CMOCKA], [cmocka],,
-    [AC_MSG_ERROR([cmocka tests requested but cmocka was not found -- libcmocka-dev suggested!])])
-fi
-AM_CONDITIONAL([USE_CMOCKA_TESTS], [test "x$with_cmocka_tests" = "xyes"])
+PKG_CHECK_MODULES([CMOCKA], [cmocka],,
+  [AC_MSG_ERROR([cmocka is required to build the test suite -- libcmocka-dev suggested!])])
 
 # Checks for libraries.
 if test "x${with_os}" = xlinux -o "x${with_os}" = xfreebsd ; then

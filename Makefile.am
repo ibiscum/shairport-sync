@@ -12,9 +12,7 @@ else
   man_MANS = $(top_srcdir)/man/shairport-sync.1
 endif
 
-if USE_CMOCKA_TESTS
-  SUBDIRS += tests
-endif
+SUBDIRS += tests
 
 lib_pair_ap_a_CFLAGS = -Wall -g -DCONFIG_GCRYPT -pthread --include=utilities/debug.h
 lib_tinyhttp_a_CFLAGS = -pthread
@@ -24,27 +22,26 @@ lib_mpris_interface_a_CFLAGS = -pthread @glib_CFLAGS@
 bin_PROGRAMS = shairport-sync
 
 check_PROGRAMS = tests/test_audio_bitrate tests/test_metadata_queue tests/test_pc_queue_header_api_contract
-if USE_CMOCKA_TESTS
 check_PROGRAMS += tests/test_shairport_cli_regression
-endif
 TESTS = $(check_PROGRAMS)
 tests_test_audio_bitrate_SOURCES = tests/test_audio_bitrate.c tests/test_audio_bitrate_stubs.c metadata/audio_bitrate.c
-tests_test_audio_bitrate_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_audio_bitrate_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir) $(CMOCKA_CFLAGS)
 tests_test_audio_bitrate_LDFLAGS = -pthread
+tests_test_audio_bitrate_LDADD = $(CMOCKA_LIBS)
 tests_test_metadata_queue_SOURCES = tests/test_metadata_queue.c
-tests_test_metadata_queue_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_metadata_queue_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir) $(CMOCKA_CFLAGS)
 tests_test_metadata_queue_LDFLAGS = -pthread
+tests_test_metadata_queue_LDADD = $(CMOCKA_LIBS)
 tests_test_pc_queue_header_api_contract_SOURCES = tests/test_pc_queue_header_api_contract.c
-tests_test_pc_queue_header_api_contract_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_pc_queue_header_api_contract_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir) $(CMOCKA_CFLAGS)
 tests_test_pc_queue_header_api_contract_LDFLAGS = -pthread
-if USE_CMOCKA_TESTS
+tests_test_pc_queue_header_api_contract_LDADD = $(CMOCKA_LIBS)
 tests_test_shairport_cli_regression_SOURCES = tests/test_shairport_cli_regression.c
 tests_test_shairport_cli_regression_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir) $(CMOCKA_CFLAGS) \
 	-DABS_TOP_BUILDDIR='"$(abs_top_builddir)"'
 tests_test_shairport_cli_regression_LDFLAGS = -pthread
 tests_test_shairport_cli_regression_LDADD = $(CMOCKA_LIBS)
 tests_test_shairport_cli_regression_DEPENDENCIES = shairport-sync$(EXEEXT)
-endif
 
 # BUILT_SOURCES get built before anything else (?)
 

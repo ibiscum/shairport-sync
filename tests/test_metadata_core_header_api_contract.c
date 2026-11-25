@@ -1,3 +1,9 @@
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include "metadata/core.h"
 
 typedef int (*send_metadata_to_queue_sig_t)(pc_queue *queue, const uint32_t type,
@@ -28,4 +34,13 @@ _Static_assert(
                                  metadata_fourcc_from_string_sig_t),
     "metadata_fourcc_from_string signature drifted from core.h contract");
 
-int main(void) { return 0; }
+static void test_metadata_core_header_api_contract_compiles(
+    __attribute__((unused)) void **state) {}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_metadata_core_header_api_contract_compiles),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}

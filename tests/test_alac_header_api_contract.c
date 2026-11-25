@@ -1,3 +1,9 @@
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cmocka.h>
 #include "alac.h"
 
 typedef alac_file *(*alac_create_sig_t)(int samplesize, int numchannels);
@@ -19,4 +25,12 @@ _Static_assert(
 _Static_assert(__builtin_types_compatible_p(__typeof__(&alac_free), alac_free_sig_t),
                "alac_free signature drifted from alac.h contract");
 
-int main(void) { return 0; }
+static void test_alac_header_api_contract_compiles(__attribute__((unused)) void **state) {}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_alac_header_api_contract_compiles),
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}
