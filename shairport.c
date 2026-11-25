@@ -1286,9 +1286,9 @@ int parse_options(int argc, char **argv) {
       }
 
       if (config_lookup_float(config.cfg, "sessioncontrol.active_state_timeout", &dvalue)) {
-        if (dvalue < 0.0)
-          warn("Invalid value \"%f\" for \"active_state_timeout\". It must be positive. "
-               "The default of %f will be used instead.",
+        if (dvalue < 0.0 || dvalue > (double)(UINT64_MAX / 1000000000ULL))
+          warn("Invalid value \"%f\" for \"active_state_timeout\". It must be positive and "
+               "within the supported range. The default of %f will be used instead.",
                dvalue, config.active_state_timeout);
         else
           config.active_state_timeout = dvalue;

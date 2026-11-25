@@ -84,6 +84,25 @@ struct name_comp {
   struct name_comp *next;
 };
 
+static inline uint8_t dns_ascii_tolower(uint8_t c) {
+  if ((c >= 'A') && (c <= 'Z'))
+    return (uint8_t)(c + ('a' - 'A'));
+  return c;
+}
+
+static void normalize_nlabel(uint8_t *name) {
+  if (name == NULL)
+    return;
+
+  uint8_t *p = name;
+  while (*p) {
+    uint8_t label_len = *p++;
+    for (uint8_t i = 0; i < label_len; i++)
+      p[i] = dns_ascii_tolower(p[i]);
+    p += label_len;
+  }
+}
+
 // ----- label functions -----
 
 // duplicates a name
@@ -245,6 +264,8 @@ uint8_t *create_nlabel(const char *name) {
     lenpos = dot;
   }
 
+  normalize_nlabel((uint8_t *)label);
+
   return (uint8_t *)label;
 }
 
@@ -374,7 +395,37 @@ static uint8_t *uncompress_nlabel(uint8_t *pkt_buf, size_t pkt_len, size_t off) 
 
   *sp = '\0';
 
+  normalize_nlabel((uint8_t *)str);
+
   return (uint8_t *)str;
+}
+
+int cmp_nlabel(const uint8_t *L1, const uint8_t *L2) {
+  if (L1 == L2)
+    return 0;
+  if (L1 == NULL)
+    return -1;
+  if (L2 == NULL)
+    return 1;
+
+  while (*L1 || *L2) {
+    uint8_t len1 = *L1++;
+    uint8_t len2 = *L2++;
+    if (len1 != len2)
+      return (len1 < len2) ? -1 : 1;
+
+    for (uint8_t i = 0; i < len1; i++) {
+      uint8_t c1 = dns_ascii_tolower(L1[i]);
+      uint8_t c2 = dns_ascii_tolower(L2[i]);
+      if (c1 != c2)
+        return (c1 < c2) ? -1 : 1;
+    }
+
+    L1 += len1;
+    L2 += len2;
+  }
+
+  return 0;
 }
 
 // ----- RR list & group functions -----
@@ -1341,6 +1392,9 @@ static ssize_t send_packet(int fd, const void *data, size_t len) {
 static int populate_answers(struct mdnsd *svr, struct rr_list **rr_head, uint8_t *name,
                             enum rr_type type) {
   int num_ans = 0;
+
+  if (name == NULL)
+    return num_ans;
 
   // check if we have the records
   pthread_mutex_lock(&svr->data_lock);

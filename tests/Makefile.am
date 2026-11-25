@@ -11,8 +11,15 @@ check_PROGRAMS = \
 	test_dacp_safety \
 	test_dacp_lifecycle_safety \
 	test_mdns_minimal \
+	test_mqtt_header_self_containment \
+	test_mqtt_header_api_contract \
+	test_tinysvcmdns_labels_regression \
+	test_tinysvcmdns_regression \
+	test_nqptp_shm_structures_regression \
+	test_ptp_utilities_regression \
 	test_player_common_regression \
 	test_player_common_unit \
+	test_rtsp_line_regression \
 	test_rtp_minimal \
 	test_tinyhttp_parser_regression
 TESTS = $(check_PROGRAMS)
@@ -83,7 +90,44 @@ test_mdns_minimal_SOURCES = \
 test_mdns_minimal_LDFLAGS = -pthread
 test_mdns_minimal_LDADD = $(CMOCKA_LIBS)
 
-test_player_common_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_mqtt_header_self_containment_CFLAGS = -pthread
+test_mqtt_header_self_containment_SOURCES = test_mqtt_header_self_containment.c
+test_mqtt_header_self_containment_LDFLAGS = -pthread
+
+test_mqtt_header_api_contract_CFLAGS = -pthread
+test_mqtt_header_api_contract_SOURCES = test_mqtt_header_api_contract.c
+test_mqtt_header_api_contract_LDFLAGS = -pthread
+
+test_tinysvcmdns_labels_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
+	-include $(top_srcdir)/tests/test_tinysvcmdns_harness.h
+test_tinysvcmdns_labels_regression_SOURCES = \
+	test_tinysvcmdns_labels_regression.c \
+	test_tinysvcmdns_label_stubs.c \
+	$(top_srcdir)/tinysvcmdns.c
+test_tinysvcmdns_labels_regression_LDFLAGS = -pthread -Wl,--gc-sections
+test_tinysvcmdns_labels_regression_LDADD = $(CMOCKA_LIBS)
+
+test_tinysvcmdns_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_tinysvcmdns_regression_SOURCES = test_tinysvcmdns_regression.c
+test_tinysvcmdns_regression_LDFLAGS = -pthread
+test_tinysvcmdns_regression_LDADD = $(CMOCKA_LIBS)
+
+test_nqptp_shm_structures_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_nqptp_shm_structures_regression_SOURCES = test_nqptp_shm_structures_regression.c
+test_nqptp_shm_structures_regression_LDFLAGS = -pthread
+test_nqptp_shm_structures_regression_LDADD = $(CMOCKA_LIBS)
+
+test_ptp_utilities_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
+	--include $(top_srcdir)/utilities/debug.h \
+	-include $(top_srcdir)/tests/test_ptp_utilities_harness.h
+test_ptp_utilities_regression_SOURCES = \
+	test_ptp_utilities_regression.c \
+	test_ptp_utilities_stubs.c \
+	$(top_srcdir)/ptp-utilities.c
+test_ptp_utilities_regression_LDFLAGS = -pthread -Wl,--gc-sections
+test_ptp_utilities_regression_LDADD = $(CMOCKA_LIBS)
+
+test_player_common_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
 test_player_common_regression_SOURCES = test_player_common_regression.c
 test_player_common_regression_LDFLAGS = -pthread
 test_player_common_regression_LDADD = $(CMOCKA_LIBS)
@@ -93,7 +137,14 @@ test_player_common_unit_SOURCES = test_player_common_unit.c
 test_player_common_unit_LDFLAGS = -pthread
 test_player_common_unit_LDADD = $(CMOCKA_LIBS)
 
-test_rtp_minimal_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_rtsp_line_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_rtsp_line_regression_SOURCES = \
+	test_rtsp_line_regression.c \
+	$(top_srcdir)/utilities/rtsp_line_utilities.c
+test_rtsp_line_regression_LDFLAGS = -pthread
+test_rtsp_line_regression_LDADD = $(CMOCKA_LIBS)
+
+test_rtp_minimal_CFLAGS = $(CMOCKA_CFLAGS) -pthread
 test_rtp_minimal_SOURCES = \
 	test_rtp_minimal.c \
 	test_rtp_minimal_stubs.c \

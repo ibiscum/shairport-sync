@@ -55,6 +55,7 @@
 
 #include "activity_monitor.h"
 #include "utilities/network_utilities.h"
+#include "utilities/rtsp_line_utilities.h"
 #include "utilities/rtsp_message_utilities.h"
 #include "utilities/string_utilities.h"
 
@@ -331,11 +332,11 @@ void release_play_lock(rtsp_conn_info *conn) {
         principal_conn->airplay_gid = NULL; // stop using the client's GID as our GID.
       }
 #endif
-      config.airplay_statusflags &= (0xffffffff - (1 << 17)); // ReceiverSessionIsActive
-      build_bonjour_strings(principal_conn);
-      mdns_update(txt_records, secondary_txt_records);
-      debug(4, "Connection %d: (%s) has released play lock.", conn->connection_number,
-            get_category_string(conn->airplay_stream_category));
+      if (conn != NULL)
+        debug(2, "Connection %d: %s released principal_conn.", conn->connection_number,
+              get_category_string(conn->airplay_stream_category));
+      else
+        debug(2, "A NULL connection released principal_conn.");
     }
     principal_conn = NULL; // let it go
   }
@@ -379,7 +380,7 @@ play_lock_r get_play_lock(rtsp_conn_info *conn, int allow_session_interruption) 
     if (principal_conn == conn) {
       response = play_lock_already_acquired;
     } else if (principal_conn == NULL) {
-      // no other connection already has play lock
+      // principal conn is NULL, so this connection can acquire it directly
       principal_conn = conn;
       config.airplay_statusflags |= (1 << 17); // ReceiverSessionIsActive
       build_bonjour_strings(conn);
@@ -423,34 +424,9 @@ play_lock_r get_play_lock(rtsp_conn_info *conn, int allow_session_interruption) 
     }
     pthread_cleanup_pop(1); // release the principal_conn lock
   } else {
-    debug(1, "Connection %d: (%s) get_play_lock must have a non-NULL conn.",
-          conn->connection_number, get_category_string(conn->airplay_stream_category));
+    debug(1, "get_play_lock must have a non-NULL conn.");
   }
   return response;
-}
-
-// park a null at the line ending, and return the next line pointer
-// accept \r, \n, or \r\n
-static char *nextline(char *in, int inbuf) {
-  char *out = NULL;
-  while (inbuf) {
-    if (*in == '\r') {
-      *in++ = 0;
-      out = in;
-      inbuf--;
-    }
-    if ((*in == '\n') && (inbuf)) {
-      *in++ = 0;
-      out = in;
-    }
-
-    if (out)
-      break;
-
-    in++;
-    inbuf--;
-  }
-  return out;
 }
 
 #ifdef CONFIG_AIRPLAY_2
@@ -675,7 +651,7 @@ enum rtsp_read_request_response rtsp_read_request(rtsp_conn_info *conn, rtsp_mes
 
           char *next;
           while ((reply == rtsp_read_request_response_pending) && (msg_size < 0) &&
-                 (next = nextline(buf, inbuf))) {
+                 (next = rtsp_nextline(buf, inbuf))) {
             msg_size = msg_handle_line(the_packet, buf);
             if (!(*the_packet)) {
               debug(1, "Connection %d: rtsp_read_request can't find an RTSP header.",
@@ -3233,7 +3209,7 @@ void handle_set_parameter_parameter(rtsp_conn_info *conn, rtsp_message *req,
 
   char *next;
   while (cp_left && cp) {
-    next = nextline(cp, cp_left);
+    next = rtsp_nextline(cp, cp_left);
     // note: "next" will return NULL if there is no \r or \n or \r\n at the end of this
     // but we are always guaranteed that if cp is not null, it will be pointing to something
     // NUL-terminated
@@ -3510,7 +3486,7 @@ static void handle_announce(rtsp_conn_info *conn, rtsp_message *req, rtsp_messag
     int cp_left = req->contentlength;
     char *next;
     while (cp_left && cp) {
-      next = nextline(cp, cp_left);
+      next = rtsp_nextline(cp, cp_left);
       cp_left -= next - cp;
 
       if (!strncmp(cp, "a=rtpmap:96 L16/44100/2", strlen("a=rtpmap:96 L16/44100/2")))
@@ -4379,7 +4355,7 @@ static void *rtsp_conversation_thread_func(void *pconn) {
         } else if (lreply != (ssize_t)strlen(response_text)) {
           debug(1,
                 "rtsp_read_request_response_bad_packet write %zd bytes requested but %d written.",
-                strlen(response_text), reply);
+                strlen(response_text), (int)lreply);
         }
       }
     }

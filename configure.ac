@@ -184,9 +184,13 @@ AC_ARG_WITH(ssl, [AS_HELP_STRING([--with-ssl=<argument>],[choose --with-ssl=open
 if test "x${with_ssl}" = xopenssl ; then
 	AC_DEFINE([CONFIG_OPENSSL], 1, [Use the OpenSSL libraries for encryption and encoding and decoding])
 	if  test "x${with_pkg_config}" = xyes ; then
-	  PKG_CHECK_MODULES(
-	      [SSL], [libssl,libcrypto],
-	      [CFLAGS="${SSL_CFLAGS} ${CFLAGS}" LIBS="${SSL_LIBS} ${LIBS}"])
+    # Fail fast with a clear dependency error before attempting to resolve cflags/libs.
+    PKG_CHECK_EXISTS([libssl libcrypto],,
+      [AC_MSG_ERROR([OpenSSL selected with --with-ssl=openssl, but pkg-config packages libssl and libcrypto were not found. Install OpenSSL development packages first (e.g. libssl-dev on Debian/Ubuntu).])])
+    PKG_CHECK_MODULES(
+        [SSL], [libssl libcrypto],
+        [CFLAGS="${SSL_CFLAGS} ${CFLAGS}" LIBS="${SSL_LIBS} ${LIBS}"],
+        [AC_MSG_ERROR([OpenSSL selected with --with-ssl=openssl, but pkg-config could not resolve libssl/libcrypto. Install OpenSSL development packages first (e.g. libssl-dev on Debian/Ubuntu).])])
 	else
 	  AC_CHECK_LIB([crypto], [main], , AC_MSG_ERROR(libcrypto selected but the library cannot be found!))
 	  AC_CHECK_LIB([ssl], [main], , AC_MSG_ERROR(libssl selected but the library cannot be found!))
@@ -396,7 +400,17 @@ AM_CONDITIONAL([ADD_DBUS_SUPPORT], [test "x$with_mpris_interface" = "xyes" || te
 AC_ARG_WITH(mqtt-client, [AS_HELP_STRING([--with-mqtt-client],[include a client for MQTT -- the Message Queuing Telemetry Transport protocol])])
 if test "x$with_mqtt_client" = "xyes" ; then
   AC_DEFINE([CONFIG_MQTT], 1, [Include a client for MQTT, the Message Queuing Telemetry Transport protocol])
-  AC_CHECK_LIB([mosquitto], [mosquitto_lib_init], , AC_MSG_ERROR(MQTT support requires the mosquitto library -- libmosquitto-dev suggested!))
+  if test "x${with_pkg_config}" = xyes ; then
+    PKG_CHECK_EXISTS([libmosquitto],,
+      [AC_MSG_ERROR([MQTT support requires libmosquitto (pkg-config module not found) -- libmosquitto-dev suggested!])])
+    PKG_CHECK_MODULES(
+      [MOSQUITTO], [libmosquitto],
+      [CFLAGS="${MOSQUITTO_CFLAGS} ${CFLAGS}" LIBS="${MOSQUITTO_LIBS} ${LIBS}"],
+      [AC_MSG_ERROR([MQTT support requires libmosquitto -- libmosquitto-dev suggested!])])
+  else
+    AC_CHECK_LIB([mosquitto], [mosquitto_lib_init], ,
+      AC_MSG_ERROR([MQTT support requires the mosquitto library -- libmosquitto-dev suggested!]))
+  fi
 fi
 AM_CONDITIONAL([USE_MQTT], [test "x$with_mqtt_client" = "xyes"])
 
@@ -465,8 +479,8 @@ if test "x$with_airplay_2" = "xyes" ; then
   AC_DEFINE([CONFIG_AIRPLAY_2], 1, [Build for AirPlay 2])
   AC_CHECK_PROG(PLISTUTIL_CHECK,plistutil,yes)
   AS_IF([test x"$PLISTUTIL_CHECK" != x"yes"], [AC_MSG_ERROR([plistutil can not be found. Please install plistutil for building for AirPlay 2. Maybe it's in the apt package libplist-utils.])])
-  AC_CHECK_PROG(XXD_CHECK,xxd,yes)
-  AS_IF([test x"$XXD_CHECK" != x"yes"], [AC_MSG_ERROR([xxd can not be found. Please install xxd for building for AirPlay 2.])])
+  AC_PATH_PROG([XXD], [xxd], [no])
+  AS_IF([test x"$XXD" = x"no"], [AC_MSG_ERROR([xxd can not be found. Please install xxd for building for AirPlay 2.])])
   LIBPLIST_PACKAGE=libplist
   PKG_CHECK_EXISTS(libplist-2.0, LIBPLIST_PACKAGE=libplist-2.0)
   PKG_CHECK_MODULES([libplist_2_7_0], [${LIBPLIST_PACKAGE} >= 2.7.0], [AC_DEFINE([HAVE_LIBPLIST_GE_2_7_0], 1, [libplist >= 2.7.0])],[:])

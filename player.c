@@ -5215,6 +5215,11 @@ static void player_send_volume_metadata(uint8_t vol_mode_both, double airplay_vo
 }
 
 void player_volume_without_notification(double airplay_volume, rtsp_conn_info *conn) {
+  if (conn == NULL) {
+    warn("player_volume_without_notification called with NULL conn");
+    return;
+  }
+
   pthread_mutex_lock(&conn->volume_control_mutex);
   // store the volume first: the metadata hub reads config.airplay_volume when it
   // processes the 'pvol' message sent below, possibly before this function returns
@@ -5409,12 +5414,8 @@ void player_volume_without_notification(double airplay_volume, rtsp_conn_info *c
 
       conn->fix_volume = temp_fix_volume;
     }
-    if (conn != NULL)
-      debug(4, "Connection %d: AirPlay Volume set to %.3f, Output Level set to: %.2f dB.",
-            conn->connection_number, airplay_volume, scaled_attenuation / 100.0);
-    else
-      debug(3, "AirPlay Volume set to %.3f, Output Level set to: %.2f dB. NULL conn.",
-            airplay_volume, scaled_attenuation / 100.0);
+        debug(4, "Connection %d: AirPlay Volume set to %.3f, Output Level set to: %.2f dB.",
+          conn->connection_number, airplay_volume, scaled_attenuation / 100.0);
 
     if (config.logOutputLevel) {
       inform("Output Level set to: %.2f dB.", scaled_attenuation / 100.0);
@@ -5515,19 +5516,25 @@ int player_play(rtsp_conn_info *conn) {
 
     int rc = named_pthread_create_with_priority(pt, 3, player_thread_func, (void *)conn,
                                                 "player_%d", conn->connection_number);
-    if (rc)
+    if (!player_pthread_create_succeeded(rc)) {
       debug(1, "Connection %d: error creating player_thread: %s", conn->connection_number,
-            strerror(errno));
-    conn->player_thread = pt; // set _after_ creation of thread
+            strerror(rc));
+      free(pt);
+      response = -1;
+    } else {
+      conn->player_thread = pt; // set _after_ creation of thread
+    }
   } else {
     debug(1, "Connection %d: player thread already exists.", conn->connection_number);
   }
   pthread_cleanup_pop(1); // release the player_create_delete_mutex
+  if (response == 0)
+    conn->is_playing = 1;
 #ifdef CONFIG_METADATA
-  send_ssnc_metadata('pbeg', NULL, 0, 1); // contains cancellation points
+  if (response == 0)
+    send_ssnc_metadata('pbeg', NULL, 0, 1); // contains cancellation points
 #endif
-  conn->is_playing = 1;
-  return 0;
+  return response;
 }
 
 int player_stop(rtsp_conn_info *conn) {
@@ -5541,20 +5548,23 @@ int player_stop(rtsp_conn_info *conn) {
     conn->player_thread = NULL; // cleared _before_ cancelling of thread
     pthread_cancel(*pt);
     debug(3, "player_thread join...");
-    if (pthread_join(*pt, NULL) == -1) {
+    int join_rc = pthread_join(*pt, NULL);
+    if (!player_pthread_join_succeeded(join_rc)) {
       char errorstring[1024];
-      strerror_r(errno, (char *)errorstring, sizeof(errorstring));
-      debug(1, "Connection %d: error %d joining player thread: \"%s\".", conn->connection_number,
-            errno, (char *)errorstring);
+      strerror_r(join_rc, (char *)errorstring, sizeof(errorstring));
+      debug(1, "Connection %d: error %d joining player thread: \"%s\".",
+            conn->connection_number, join_rc, (char *)errorstring);
+      conn->player_thread = pt;
+      response = -1;
     } else {
       debug(2, "Connection %d: player_stop successful.", conn->connection_number);
+      free(pt);
+      response = 0; // deleted
     }
-    free(pt);
     // reset_anchor_info(conn); // say the clock is no longer valid
 #ifdef CONFIG_CONVOLUTION
     convolver_clear_state();
 #endif
-    response = 0; // deleted
   } else {
     debug(2, "Connection %d: no player thread.", conn->connection_number);
     response = -1; // already deleted or never created...

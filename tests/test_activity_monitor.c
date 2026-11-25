@@ -81,6 +81,21 @@ static void test_active_to_inactive_deferred_when_timeout_nonzero(void **test_st
   assert_int_equal(config.keep_dac_busy, 1);
 }
 
+static void test_reactivation_cancels_deferred_inactive_transition(void **test_state) {
+  (void)test_state;
+
+  activity_monitor_signify_activity(1);
+  reset_command_execute_stub();
+
+  config.active_state_timeout = 2.5;
+  activity_monitor_signify_activity(0);
+  activity_monitor_signify_activity(1);
+
+  assert_int_equal(activity_status(), am_active);
+  assert_int_equal(command_execute_call_count, 0);
+  assert_int_equal(config.keep_dac_busy, 1);
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
       cmocka_unit_test_setup_teardown(test_inactive_to_active_is_immediate, setup, teardown),
@@ -88,6 +103,8 @@ int main(void) {
           test_active_to_inactive_immediate_when_timeout_zero, setup, teardown),
       cmocka_unit_test_setup_teardown(
           test_active_to_inactive_deferred_when_timeout_nonzero, setup, teardown),
+      cmocka_unit_test_setup_teardown(
+          test_reactivation_cancels_deferred_inactive_transition, setup, teardown),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
