@@ -33,14 +33,27 @@
 #include <stdint.h>
 #include <stdio.h>
 
+static double clamped_bitrate_stats_interval_seconds(void) {
+  if (config.bitrate_stats_interval > 0.0)
+    return config.bitrate_stats_interval;
+  return 0.0;
+}
+
+static uint64_t bitrate_report_interval_samples(uint32_t rate) {
+  double interval_seconds = clamped_bitrate_stats_interval_seconds();
+  if (interval_seconds > 0.0)
+    return (uint64_t)(interval_seconds * rate);
+  return 5 * (uint64_t)rate;
+}
+
 int audio_bitrate_reset(audio_bitrate_meter *meter) {
   int had_data = meter->have_packet;
   *meter = (audio_bitrate_meter){0};
   return had_data;
 }
 
-int audio_bitrate_is_duplicate(const audio_bitrate_meter *meter, uint32_t sequence,
-                               uint32_t timestamp) {
+static int audio_bitrate_is_duplicate(const audio_bitrate_meter *meter, uint32_t sequence,
+                                      uint32_t timestamp) {
   unsigned slot = sequence % AUDIO_BITRATE_HISTORY_SIZE;
   return meter->packets[slot].valid && meter->packets[slot].sequence == sequence &&
          meter->packets[slot].timestamp == timestamp;
@@ -69,16 +82,12 @@ int audio_bitrate_add(audio_bitrate_meter *meter, uint64_t bytes, uint32_t sampl
   meter->packets[slot].timestamp = timestamp;
   meter->packets[slot].valid = 1;
   meter->have_packet = 1;
-  if (!meter->next_report) {
-    if (config.bitrate_stats_interval > 0.0) {
-      meter->next_report = (uint64_t)(config.bitrate_stats_interval * rate);
-    } else {
-      meter->next_report = 5 * (uint64_t)rate;
-    }
-  }
+  uint64_t report_interval = bitrate_report_interval_samples(rate);
+  if (!meter->next_report)
+    meter->next_report = report_interval;
   if (meter->samples < meter->next_report)
     return result;
-  meter->next_report = meter->samples + (uint64_t)(config.bitrate_stats_interval * rate);
+  meter->next_report = meter->samples + report_interval;
   return result | AUDIO_BITRATE_REPORT;
 }
 
@@ -87,9 +96,9 @@ static void publish_audio_bitrate(const audio_bitrate_meter *meter) {
   char text[96];
   int length = snprintf(text, sizeof(text), "%" PRIu64 "/%" PRIu64 "/%u", meter ? meter->bytes : 0,
                         meter ? meter->samples : 0, meter ? meter->rate : 0);
-  if (config.bitrate_stats_interval != 0.0) {
+  if (clamped_bitrate_stats_interval_seconds() > 0.0) {
     if (length > 0 && (size_t)length < sizeof(text))
-      send_ssnc_metadata('abrt', text, length, 0);
+      send_ssnc_metadata(METADATA_FOURCC('a', 'b', 'r', 't'), text, length, 0);
   }
 }
 
@@ -152,9 +161,11 @@ void account_input_bitrate(rtsp_conn_info *conn, uint32_t ssrc, uint64_t bytes, 
 }
 
 void report_player_counters(rtsp_conn_info *conn) {
-  if (config.bitrate_stats_interval != 0.0) {
+  double interval_seconds = clamped_bitrate_stats_interval_seconds();
+  if (interval_seconds > 0.0) {
     uint64_t stats_now = get_absolute_time_in_ns();
-    if (!conn->last_receiver_stats || stats_now - conn->last_receiver_stats >= (config.bitrate_stats_interval * 1E9)) {
+    if (!conn->last_receiver_stats ||
+        stats_now - conn->last_receiver_stats >= (interval_seconds * 1E9)) {
       uint64_t missing = 0, too_late = 0, retries = 0;
       pthread_mutex_lock_and_cleanup_push(&conn->ab_mutex);
       missing = conn->missing_packets;
@@ -167,7 +178,7 @@ void report_player_counters(rtsp_conn_info *conn) {
                             too_late, retries);
       
         if (length > 0 && (size_t)length < sizeof(stats))
-          send_ssnc_metadata('arst', stats, length, 0);
+          send_ssnc_metadata(METADATA_FOURCC('a', 'r', 's', 't'), stats, length, 0);
   
       conn->last_receiver_stats = stats_now;
     }

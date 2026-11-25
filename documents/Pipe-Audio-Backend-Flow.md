@@ -55,6 +55,107 @@ Not implemented in this backend:
 5. Falls back to `/tmp/shairport-sync-audio` if none supplied.
 6. Creates FIFO with mkfifo (ignores EEXIST).
 
+## Format, Rate, and Channel Capabilities
+
+The pipe backend is not fixed to 16-bit / 44.1 kHz.
+
+Current behavior:
+
+1. Defaults are build-mode dependent:
+- AirPlay 2 builds default to `S32_LE`, `48000`, `2` channels.
+- Classic (non-AirPlay-2) builds default to `S16_LE`, `44100`, `2` channels.
+
+2. Capabilities are configurable through the shared audio option parser:
+- `pipe.output_rate`
+- `pipe.output_format`
+- `pipe.output_channels`
+
+3. The backend selects output via shared configuration search and then writes raw PCM bytes to the
+FIFO for the selected format.
+
+Practical note:
+
+- If a downstream consumer (for example, Snapserver) expects a fixed PCM format, pin pipe output to
+single values for rate/format/channels so both sides match exactly.
+
+### Snapserver 24/48 Interop Status
+
+Current status (as observed in practice and consistent with packing code):
+
+- `S24_3LE` from Shairport Sync is packed 24-bit PCM (`3` bytes/sample), so it does not match
+  Snapserver `sampleformat=...:24:...` (`4` bytes/sample).
+- `S24_LE` from Shairport Sync is 24-in-32 with an explicit zero padding byte, not sign-extension
+  of the 24-bit sign bit.
+- With Snapserver configured for `sampleformat=...:24:...`, both combinations can sound distorted.
+
+Verification references:
+- Shairport Sync sample sizes: [sps_format_sample_size_array](../common.c#L135)
+- Shairport Sync byte packing: [process_sample](../player.c#L2010)
+- Snapserver `bits=24` sample size handling: <https://github.com/snapcast/snapcast/blob/develop/common/sample_format.cpp>
+
+### Recommended Stable Setup (Shairport Sync + Snapserver)
+
+Until 24-bit container expectations are aligned end-to-end, use fixed 32-bit / 48 kHz stereo on both sides.
+
+Shairport Sync (`shairport-sync.conf`):
+
+- `general.output_backend = "pipe"`
+- `pipe.name = "/tmp/snapfifo-airplay"`
+- `pipe.output_rate = 48000`
+- `pipe.output_format = "S32_LE"`
+- `pipe.output_channels = 2`
+
+Snapserver (`/etc/snapserver.conf`):
+
+- `source = pipe:///tmp/snapfifo-airplay?name=AirPlay&mode=read&sampleformat=48000:32:2&codec=flac`
+
+Notes:
+
+- Keep the values fixed (do not use `auto` or multi-value lists) for FIFO consumers that assume a
+single stream format.
+- If 32-bit is not acceptable in your environment, test 16-bit explicitly:
+`sampleformat=48000:16:2` with `pipe.output_format = "S16_LE"`.
+
+### 32/48 Sine-Wave Test Fixture (recommended)
+
+Use this fixture to verify a fixed 32-bit / 48 kHz FIFO path.
+
+Validate the consumer chain (Snapserver and clients) with a known-good 32/48 source:
+
+```bash
+# terminal A
+sudo -u shairport-sync ffmpeg -re -f lavfi -i "sine=frequency=1000:sample_rate=48000:duration=15" -ac 2 -c:a pcm_s32le -f s32le /tmp/snapfifo-airplay
+```
+
+If this is clean at clients, the Snapserver side can decode/play 32/48 correctly.
+
+Step 2: Validate Shairport Sync FIFO output format directly.
+
+- Keep Shairport Sync pinned to fixed 32/48/2 settings.
+- Ensure only one FIFO reader is active while capturing raw bytes.
+
+Capture five seconds from the FIFO:
+
+```bash
+timeout 6s head -c 1920000 /tmp/shairport_pipe_5s.raw < /tmp/snapfifo-airplay
+```
+
+Expected byte count for 5 seconds at 32/48 stereo:
+
+- `48000 * 2 * 4 * 5 = 1920000` bytes
+
+Decode check:
+
+```bash
+ffmpeg -f s32le -ar 48000 -ac 2 -i /tmp/shairport_pipe_5s.raw -f null -
+```
+
+Interpretation:
+
+- Clean decode and expected byte count indicate correct 32/48/2 pipe output.
+- Size mismatch indicates a format/rate/channel mismatch in configuration.
+- For current Snapserver interop, prefer 32/48 over 24/48.
+
 ## Configuration Flow
 
 [get_configuration](../audio_pipe.c#L158):

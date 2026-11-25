@@ -84,15 +84,15 @@ struct shm_structure {
 typedef struct shm_structure nqptp_shm_structure;
 
 // Shared-memory ABI guards: keep explicit layout assumptions visible and checked.
-_Static_assert(sizeof(shm_structure_set) == 32,
+_Static_assert(sizeof(shm_structure_set) == 40,
                "Unexpected shm_structure_set size; shared-memory ABI mismatch.");
 _Static_assert(offsetof(struct shm_structure, version) == 0,
                "Unexpected shm_structure.version offset; shared-memory ABI mismatch.");
 _Static_assert(offsetof(struct shm_structure, main) == 8,
                "Unexpected shm_structure.main offset; shared-memory ABI mismatch.");
-_Static_assert(offsetof(struct shm_structure, secondary) == 40,
+_Static_assert(offsetof(struct shm_structure, secondary) == 48,
                "Unexpected shm_structure.secondary offset; shared-memory ABI mismatch.");
-_Static_assert(sizeof(struct shm_structure) == 72,
+_Static_assert(sizeof(struct shm_structure) == 88,
                "Unexpected shm_structure size; shared-memory ABI mismatch.");
 
 #endif

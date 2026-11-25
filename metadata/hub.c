@@ -45,7 +45,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-
 #include "common.h"
 #include "core.h"
 #include "dacp.h"
@@ -84,13 +83,17 @@ int metadata_hub_initialised = 0;
 pthread_rwlock_t metadata_hub_re_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 // update *str with the string specified by *data and length
-int update_string_record_with_data(char **str, const char *data, size_t length) {
+int update_string_record_with_data(char **str, const char *data, size_t length)
+{
   int changed = 0;
   if (((*str != NULL) && (data != NULL) && (strlen(*str) == length) &&
        (strncmp(*str, data, length) == 0)) ||
-      ((*str == NULL) && ((data == NULL) || (length == 0)))) {
+      ((*str == NULL) && ((data == NULL) || (length == 0))))
+  {
     changed = 0;
-  } else {
+  }
+  else
+  {
     changed = 1;
     if (*str != NULL)
       free(*str);
@@ -104,7 +107,8 @@ int update_string_record_with_data(char **str, const char *data, size_t length) 
 
 // free any pre-assigned string before copying in a new string
 // return 1 if anything has changed, 0 otherwise
-int update_string_record(char **str, const char *s) {
+int update_string_record(char **str, const char *s)
+{
   int result = 0;
   if (s == NULL)
     result = update_string_record_with_data(str, NULL, 0);
@@ -114,24 +118,30 @@ int update_string_record(char **str, const char *s) {
 }
 int invalidate_string_record(char **str) { return update_string_record(str, NULL); }
 
-int update_uint64_record(uint64_record_t *record, const uint64_t value) {
+int update_uint64_record(uint64_record_t *record, const uint64_t value)
+{
   int changed = 0;
-  if (record != NULL) {
+  if (record != NULL)
+  {
     changed = ((record->value != value) || (record->valid == 0));
     record->value = value;
     record->valid = 1;
-  } else {
+  }
+  else
+  {
     debug(1, "passing a NULL uint64_record_t pointer to update_uint64_record!");
   }
   return changed;
 }
 
-static char *metadata_dup_payload_or_log(const char *context, const char *data, uint32_t length) {
+static char *metadata_dup_payload_or_log(const char *context, const char *data, uint32_t length)
+{
   if ((data == NULL) || (length == 0))
     return NULL;
 
   char *dup = malloc((size_t)length + 1);
-  if (dup == NULL) {
+  if (dup == NULL)
+  {
     debug(1, "MH %s payload allocation failed for length %u.", context, length);
     return NULL;
   }
@@ -140,7 +150,24 @@ static char *metadata_dup_payload_or_log(const char *context, const char *data, 
   return dup;
 }
 
-void metadata_hub_init(void) {
+static const char *metadata_cover_art_cache_dir(void) {
+#ifdef CONFIG_METADATA_HUB
+  if (config.cover_art_cache_dir != NULL)
+    return config.cover_art_cache_dir;
+#endif
+  return "";
+}
+
+static int metadata_retain_coverart(void) {
+#ifdef CONFIG_METADATA_HUB
+  return config.retain_coverart;
+#else
+  return 1;
+#endif
+}
+
+void metadata_hub_init(void)
+{
   // debug(1, "Metadata bundle initialisation.");
   memset(&metadata_store, 0, sizeof(metadata_store));
   // zero is inappropriate for an initial airplay volume, as it means 0 dB, i.e. full volume!
@@ -151,10 +178,13 @@ void metadata_hub_init(void) {
 
 void metadata_hub_stop(void) {}
 
-void add_metadata_watcher(metadata_watcher fn) {
+void add_metadata_watcher(metadata_watcher fn)
+{
   int i;
-  for (i = 0; i < number_of_watchers; i++) {
-    if (metadata_watchers[i] == NULL) {
+  for (i = 0; i < number_of_watchers; i++)
+  {
+    if (metadata_watchers[i] == NULL)
+    {
       metadata_watchers[i] = fn;
       // debug(1, "Added a metadata watcher into slot %d", i);
       break;
@@ -162,16 +192,20 @@ void add_metadata_watcher(metadata_watcher fn) {
   }
 }
 
-void run_metadata_watchers(void) {
+void run_metadata_watchers(void)
+{
   int i;
-  for (i = 0; i < number_of_watchers; i++) {
-    if (metadata_watchers[i]) {
+  for (i = 0; i < number_of_watchers; i++)
+  {
+    if (metadata_watchers[i])
+    {
       metadata_watchers[i](&metadata_store);
     }
   }
 }
 
-void metadata_hub_unlock_hub_mutex_cleanup(__attribute__((unused)) void *arg) {
+void metadata_hub_unlock_hub_mutex_cleanup(__attribute__((unused)) void *arg)
+{
   debug(1, "metadata_hub_unlock_hub_mutex_cleanup called.");
   metadata_hub_modify_epilog(0);
 }
@@ -180,57 +214,84 @@ char *last_metadata_hub_modify_prolog_file = NULL;
 int last_metadata_hub_modify_prolog_line;
 int metadata_hub_re_lock_access_is_delayed;
 
-void _metadata_hub_modify_prolog(const char *filename, const int linenumber) {
+void _metadata_hub_modify_prolog(const char *filename, const int linenumber)
+{
   // always run this before changing an entry or a sequence of entries in the metadata_hub
   // debug(1, "locking metadata hub for writing");
-  if (pthread_rwlock_trywrlock(&metadata_hub_re_lock) != 0) {
+  if (pthread_rwlock_trywrlock(&metadata_hub_re_lock) != 0)
+  {
     if (last_metadata_hub_modify_prolog_file)
       debug(3, "Metadata_hub write lock at \"%s:%d\" is already taken at \"%s:%d\" -- must wait.",
             filename, linenumber, last_metadata_hub_modify_prolog_file,
             last_metadata_hub_modify_prolog_line);
     else
       debug(3, "Metadata_hub write lock is already taken by unknown -- must wait.");
-    metadata_hub_re_lock_access_is_delayed = 0;
+    metadata_hub_re_lock_access_is_delayed = 1;
     pthread_rwlock_wrlock(&metadata_hub_re_lock);
     debug(3, "Okay -- acquired the metadata_hub write lock at \"%s:%d\".", filename, linenumber);
-  } else {
-    if (last_metadata_hub_modify_prolog_file) {
+  }
+  else
+  {
+    metadata_hub_re_lock_access_is_delayed = 0;
+    if (last_metadata_hub_modify_prolog_file)
+    {
       free(last_metadata_hub_modify_prolog_file);
     }
     last_metadata_hub_modify_prolog_file = strdup(filename);
     last_metadata_hub_modify_prolog_line = linenumber;
     // debug(3, "Metadata_hub write lock acquired.");
   }
-  metadata_hub_re_lock_access_is_delayed = 0;
 }
 
-void _metadata_hub_modify_epilog(int modified, const char *filename, const int linenumber) {
+void _metadata_hub_modify_epilog(int modified, const char *filename, const int linenumber)
+{
 #ifdef CONFIG_DACP_CLIENT
   metadata_store.dacp_server_has_been_active =
       metadata_store.dacp_server_active; // set the scanner_has_been_active now.
 #endif
-  if (modified) {
+  if (modified)
+  {
     debug(2, "run metadata watchers");
     run_metadata_watchers();
   }
 
-  if (metadata_hub_re_lock_access_is_delayed) {
-    if (last_metadata_hub_modify_prolog_file) {
+  if (metadata_hub_re_lock_access_is_delayed)
+  {
+    if (last_metadata_hub_modify_prolog_file)
+    {
       debug(1, "Metadata_hub write lock taken at \"%s:%d\" is freed at \"%s:%d\".",
             last_metadata_hub_modify_prolog_file, last_metadata_hub_modify_prolog_line, filename,
             linenumber);
       free(last_metadata_hub_modify_prolog_file);
       last_metadata_hub_modify_prolog_file = NULL;
-    } else {
+    }
+    else
+    {
       debug(1, "Metadata_hub write lock taken at an unknown place is freed at \"%s:%d\".", filename,
             linenumber);
     }
   }
   pthread_rwlock_unlock(&metadata_hub_re_lock);
+  metadata_hub_re_lock_access_is_delayed = 0;
   // debug(3, "Metadata_hub write lock unlocked.");
 }
 
-char *metadata_write_image_file(const char *buf, int len) {
+void _metadata_hub_read_prolog(const char *filename, const int linenumber)
+{
+  (void)filename;
+  (void)linenumber;
+  pthread_rwlock_rdlock(&metadata_hub_re_lock);
+}
+
+void _metadata_hub_read_epilog(const char *filename, const int linenumber)
+{
+  (void)filename;
+  (void)linenumber;
+  pthread_rwlock_unlock(&metadata_hub_re_lock);
+}
+
+char *metadata_write_image_file(const char *buf, int len)
+{
 
   // warning -- this removes all files from the directory apart from this one, if it exists
   // it will return a path to the image file allocated with malloc.
@@ -239,9 +300,11 @@ char *metadata_write_image_file(const char *buf, int len) {
   int oldState;
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldState); // make this un-cancellable
   char *path = NULL;                                         // this will be what is returned
-  if (strcmp(config.cover_art_cache_dir, "") != 0) { // an empty string means do not write the file
+  const char *cache_dir = metadata_cover_art_cache_dir();
+  if (strcmp(cache_dir, "") != 0)
+  { // an empty string means do not write the file
 
-  // create the md5 hash for the filename.
+    // create the md5 hash for the filename.
     uint8_t img_md5[16];
     // uint8_t ap_md5[16];
 
@@ -303,27 +366,32 @@ char *metadata_write_image_file(const char *buf, int len) {
       ext = tif;
     else if (strncmp(buf, "\x49\x49\x2A\x00", 4) == 0) // TIFF little endian
       ext = tif;
-    else {
+    else
+    {
       debug(1, "Unidentified image type of cover art -- jpg extension used.");
       ext = jpg;
     }
     mode_t oldumask = umask(000);
-    int result = mkpath(config.cover_art_cache_dir, 0777);
+    int result = mkpath(cache_dir, 0777);
     umask(oldumask);
-    if ((result == 0) || (result == -EEXIST)) {
+    if ((result == 0) || (result == -EEXIST))
+    {
       // see if the file exists by opening it.
       // if it exists, we're done
       char *prefix = "cover-";
 
-        size_t pl = strlen(config.cover_art_cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) + 1 +
-          strlen(ext);
+      size_t pl = strlen(cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) + 1 +
+                  strlen(ext);
 
       path = malloc(pl + 1);
-        snprintf(path, pl + 1, "%s/%s%s.%s", config.cover_art_cache_dir, prefix, img_md5_str, ext);
+      snprintf(path, pl + 1, "%s/%s%s.%s", cache_dir, prefix, img_md5_str,
+           ext);
       int cover_fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRGRP | S_IROTH);
-      if (cover_fd >= 0) {
+      if (cover_fd >= 0)
+      {
         // write the contents
-        if (write(cover_fd, buf, len) < len) {
+        if (write(cover_fd, buf, len) < len)
+        {
           warn("Writing cover art file \"%s\" failed!", path);
           free(path);
           path = NULL;
@@ -331,11 +399,13 @@ char *metadata_write_image_file(const char *buf, int len) {
         close(cover_fd);
 
         // now delete all other files, if requested
-        if (config.retain_coverart == 0) {
+        if (metadata_retain_coverart() == 0)
+        {
           DIR *d;
           struct dirent *dir;
-          d = opendir(config.cover_art_cache_dir);
-          if (d) {
+          d = opendir(cache_dir);
+          if (d)
+          {
             int fnl = strlen(prefix) + strlen(img_md5_str) + 1 + strlen(ext) + 1;
 
             char *full_filename = malloc(fnl);
@@ -343,12 +413,17 @@ char *metadata_write_image_file(const char *buf, int len) {
               die("Can't allocate memory at metadata_write_image_file.");
             memset(full_filename, 0, fnl);
             snprintf(full_filename, fnl, "%s%s.%s", prefix, img_md5_str, ext);
-            int dir_fd = open(config.cover_art_cache_dir, O_DIRECTORY);
-            if (dir_fd >= 0) {
-              while ((dir = readdir(d)) != NULL) {
-                if (dir->d_type == DT_REG) {
-                  if (strcmp(full_filename, dir->d_name) != 0) {
-                    if (unlinkat(dir_fd, dir->d_name, 0) != 0) {
+            int dir_fd = open(cache_dir, O_DIRECTORY);
+            if (dir_fd >= 0)
+            {
+              while ((dir = readdir(d)) != NULL)
+              {
+                if (dir->d_type == DT_REG)
+                {
+                  if (strcmp(full_filename, dir->d_name) != 0)
+                  {
+                    if (unlinkat(dir_fd, dir->d_name, 0) != 0)
+                    {
                       debug(1, "Error %d deleting cover art file \"%s\".", errno, dir->d_name);
                     }
                   }
@@ -356,50 +431,69 @@ char *metadata_write_image_file(const char *buf, int len) {
               }
               if (close(dir_fd) < 0)
                 debug(1, "Error %d closing directory \"%s\"", errno,
-                      config.cover_art_cache_dir);
-            } else {
+                      cache_dir);
+            }
+            else
+            {
               debug(1, "Can't open the directory \"%s\" for deletion -- error %d.",
-                    config.cover_art_cache_dir, errno);
+                    cache_dir, errno);
             }
             free(full_filename);
             closedir(d);
           }
         }
-      } else {
+      }
+      else
+      {
         //      if (errno == EEXIST)
         //        debug(1, "Cover art file \"%s\" already exists!", path);
         //      else {
-        if (errno != EEXIST) {
+        if (errno != EEXIST)
+        {
           warn("Could not open file \"%s\" for writing cover art", path);
           free(path);
           path = NULL;
         }
       }
-    } else {
+    }
+    else
+    {
       debug(1, "Couldn't access or create the cover art cache directory \"%s\".",
-        config.cover_art_cache_dir);
+            cache_dir);
     }
   }
   pthread_setcancelstate(oldState, NULL);
   return path;
 }
 
-int metadata_hub_process_picture(const char *data, const size_t length) {
+int metadata_hub_process_picture(const char *data, const size_t length)
+{
   int changed = 0;
-  if (length > 0) {
-    if (data != NULL) {
+  const char *cache_dir = metadata_cover_art_cache_dir();
+  if (length > 0)
+  {
+    if (data != NULL)
+    {
       char uri[2048];
       if ((length > 16) &&
-          (strcmp(config.cover_art_cache_dir, "") != 0)) { // if it's okay to write the file
+          (strcmp(cache_dir, "") != 0))
+      { // if it's okay to write the file
         char *pathname = metadata_write_image_file(data, length);
-        snprintf(uri, sizeof(uri), "file://%s", pathname);
-        free(pathname);
-        changed = update_string_record(&metadata_store.npi.cover_art_pathname, uri);
+        if (pathname != NULL)
+        {
+          snprintf(uri, sizeof(uri), "file://%s", pathname);
+          free(pathname);
+          changed = update_string_record(&metadata_store.npi.cover_art_pathname, uri);
+        }
       }
-    } else {
+    }
+    else
+    {
       debug(1, "faulty picture data -- data NULL with non-zero length!");
     }
-  } else { // length of incoming picture is zero...
+  }
+  else
+  { // length of incoming picture is zero...
     changed = update_string_record(&metadata_store.npi.cover_art_pathname, NULL);
   }
   return changed;
@@ -410,7 +504,8 @@ metadata_npi_bundle new_npi;
 char *temporary_cover_art_pathname = NULL;
 uint64_record_t temporary_item_id;
 
-void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t length) {
+void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uint32_t length)
+{
   // metadata coming in from the audio source or from Shairport Sync itself passes through here
   // this has more information about tags, which might be relevant:
   // https://code.google.com/p/ytrack/wiki/DMAP
@@ -425,11 +520,20 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
   int changed = 0;
   metadata_hub_modify_prolog();
   pthread_cleanup_push(metadata_hub_unlock_hub_mutex_cleanup, NULL);
-  if (type == 'core') {
-    switch (code) {
-    case 'caps': {
+  if (type == 'core')
+  {
+    switch (code)
+    {
+    case 'caps':
+    {
+      if ((length < 1) || (data == NULL))
+      {
+        debug(1, "MH Playing State item too short: length %u.", length);
+        break;
+      }
       // get the one-byte number as an unsigned number
-      if (((unsigned)metadata_store.npi.playing_state != (unsigned)data[0])) {
+      if (((unsigned)metadata_store.npi.playing_state != (unsigned)data[0]))
+      {
         debug(4, ">> MH playing state changing from %d to %d.", metadata_store.npi.playing_state,
               (unsigned)data[0]);
         metadata_store.npi.playing_state = (unsigned)data[0];
@@ -438,9 +542,12 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         // even if audio is coming through from the player
         // it is used to validate progress string information
       }
-    } break;
-    case 'asdk': {
-      if (length < 1) {
+    }
+    break;
+    case 'asdk':
+    {
+      if (length < 1)
+      {
         debug(1, "MH Song Data Kind item too short: length %u.", length);
         break;
       }
@@ -449,29 +556,40 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       metadata_packet_item_changed |=
           update_uint64_record(&metadata_store.npi.song_data_kind, (unsigned)data[0]);
       update_uint64_record(&new_npi.song_data_kind, (unsigned)data[0]);
-    } break;
-    case 'mper': {
-      if (length < 8) {
+    }
+    break;
+    case 'mper':
+    {
+      if (length < 8)
+      {
         debug(1, "MH Item ID item too short: length %u.", length);
         break;
       }
       // get the 64-bit number as a uint64_t by reading two uint32_t s and combining them
-      uint64_t vl = ntohl(*(uint32_t *)data); // get the high order 32 bits
-      vl = vl << 32;                          // shift them into the correct location
+      uint64_t vl = ntohl(*(uint32_t *)data);                      // get the high order 32 bits
+      vl = vl << 32;                                               // shift them into the correct location
       uint64_t ul = ntohl(*(uint32_t *)(data + sizeof(uint32_t))); // and the low order 32 bits
       vl = vl + ul;
       debug(4, "MH Item ID seen: \"%" PRIx64 "\" of length %u.", vl, length);
       metadata_packet_item_changed |=
           update_uint64_record(&metadata_store.npi.item_id, vl); // item id
       update_uint64_record(&new_npi.item_id, vl);
-    } break;
-    case 'astm': {
+    }
+    break;
+    case 'astm':
+    {
+      if ((length < 4) || (data == NULL))
+      {
+        debug(1, "MH Song Time item too short: length %u.", length);
+        break;
+      }
       uint32_t ui = ntohl(*(uint32_t *)data);
       debug(3, "MH Song Time seen: \"%u\" milliseconds, of length %u.", ui, length);
       metadata_packet_item_changed |= update_uint64_record(
           &metadata_store.npi.songtime_in_microseconds, ui * 1000); // microseconds
       update_uint64_record(&new_npi.songtime_in_microseconds, ui * 1000);
-    } break;
+    }
+    break;
     case 'asal':
       metadata_packet_item_changed |=
           update_string_record_with_data(&metadata_store.npi.album_name, data, length);
@@ -491,80 +609,97 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       debug(3, "MH Album Artist name set to: \"%s\"", metadata_store.npi.album_artist_name);
       break;
     case 'ascm':
-      if (update_string_record_with_data(&metadata_store.npi.comment, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.comment, data, length))
+      {
         debug(3, "MH Comment set to: \"%s\"", metadata_store.npi.comment);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.comment, data, length);
       break;
     case 'asgn':
-      if (update_string_record_with_data(&metadata_store.npi.genre, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.genre, data, length))
+      {
         debug(3, "MH Genre set to: \"%s\"", metadata_store.npi.genre);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.genre, data, length);
       break;
     case 'minm':
-      if (update_string_record_with_data(&metadata_store.npi.track_name, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.track_name, data, length))
+      {
         debug(3, "MH Track Name set to: \"%s\"", metadata_store.npi.track_name);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.track_name, data, length);
       break;
-    case 'astn': {
+    case 'astn':
+    {
+      if ((length < 2) || (data == NULL))
+      {
+        debug(1, "MH Track Number item too short: length %u.", length);
+        break;
+      }
       uint16_t ui = ntohs(*(uint16_t *)data);
       debug(3, "MH Track Number seen: \"%u\" of length %u.", ui, length);
       metadata_packet_item_changed |= update_uint64_record(&metadata_store.npi.track_number, ui);
       update_uint64_record(&new_npi.track_number, ui);
-    } break;
+    }
+    break;
     case 'ascp':
-      if (update_string_record_with_data(&metadata_store.npi.composer, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.composer, data, length))
+      {
         debug(3, "MH Composer set to: \"%s\"", metadata_store.npi.composer);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.composer, data, length);
       break;
     case 'asdt':
-      if (update_string_record_with_data(&metadata_store.npi.song_description, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.song_description, data, length))
+      {
         debug(3, "MH Song Description set to: \"%s\"", metadata_store.npi.song_description);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.song_description, data, length);
       break;
     case 'asaa':
-      if (update_string_record_with_data(&metadata_store.npi.song_album_artist, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.song_album_artist, data, length))
+      {
         debug(3, "MH Song Album Artist set to: \"%s\"", metadata_store.npi.song_album_artist);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.song_album_artist, data, length);
       break;
     case 'assn':
-      if (update_string_record_with_data(&metadata_store.npi.sort_name, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.sort_name, data, length))
+      {
         debug(3, "MH Sort Name set to: \"%s\"", metadata_store.npi.sort_name);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.sort_name, data, length);
       break;
     case 'assa':
-      if (update_string_record_with_data(&metadata_store.npi.sort_artist, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.sort_artist, data, length))
+      {
         debug(3, "MH Sort Artist set to: \"%s\"", metadata_store.npi.sort_artist);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.sort_artist, data, length);
       break;
     case 'assu':
-      if (update_string_record_with_data(&metadata_store.npi.sort_album, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.sort_album, data, length))
+      {
         debug(3, "MH Sort Album set to: \"%s\"", metadata_store.npi.sort_album);
         metadata_packet_item_changed |= 1;
       }
       update_string_record_with_data(&new_npi.sort_album, data, length);
       break;
     case 'assc':
-      if (update_string_record_with_data(&metadata_store.npi.composer, data, length)) {
+      if (update_string_record_with_data(&metadata_store.npi.sort_composer, data, length))
+      {
         debug(3, "MH Sort Composer set to: \"%s\"", metadata_store.npi.sort_composer);
         metadata_packet_item_changed |= 1;
       }
-      update_string_record_with_data(&new_npi.composer, data, length);
+      update_string_record_with_data(&new_npi.sort_composer, data, length);
       break;
     default:
       /*
@@ -588,8 +723,11 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       */
       break;
     }
-  } else if (type == 'ssnc') {
-    switch (code) {
+  }
+  else if (type == 'ssnc')
+  {
+    switch (code)
+    {
     case 'conn': // a new connection -- some things might need to be reset
       metadata_hub_reset_npi(&metadata_store.npi);
       invalidate_string_record(&metadata_store.progress_string);
@@ -604,11 +742,13 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
     case 'pcst':
     case 'pcen':
       break;
-    case 'dapo': {
+    case 'dapo':
+    {
       char *dacp_port_string = strndup(data, length);
       debug(3, "DACP port is \"%s\"", dacp_port_string);
       free(dacp_port_string);
-    } break;
+    }
+    break;
     case 'mdst':
       // start of a metadata bundle...
       debug(4, "MH Metadata stream processing start.");
@@ -640,7 +780,8 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
 
       // if the track_id of the new npi differs from the current npi
       if ((temporary_item_id.valid != 0) && (new_npi.item_id.valid != 0) &&
-          (temporary_item_id.value != new_npi.item_id.value)) {
+          (temporary_item_id.value != new_npi.item_id.value))
+      {
         debug(3, "MH Metadata detected for a new track: %" PRIu64 ".", new_npi.item_id.value);
         metadata_store.npi = new_npi;
         metadata_packet_item_changed = 1;
@@ -667,14 +808,18 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       break;
     case 'prgr':
       changed = update_string_record_with_data(&metadata_store.progress_string, data, length);
-      if (changed) {
+      if (changed)
+      {
         debug(3, "MH Progress String set to: \"%s\"", metadata_store.progress_string);
         // we need to extract the three numbers
         if (parse_prlg(metadata_store.progress_string, &metadata_store.progress_first_timestamp,
                        &metadata_store.progress_current_timestamp,
-                       &metadata_store.progress_last_timestamp) != 0) {
+                       &metadata_store.progress_last_timestamp) != 0)
+        {
           debug(1, "error parsing the progress string \"%s\"", metadata_store.progress_string);
-        } else {
+        }
+        else
+        {
           debug(4, "progress timestamps: %u/%u/%u", metadata_store.progress_first_timestamp,
                 metadata_store.progress_current_timestamp, metadata_store.progress_last_timestamp);
           debug(4, "current timestamp: %u", metadata_store.head_rtp_timestamp);
@@ -688,32 +833,37 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       break;
     case 'phb0':
       if (update_string_record_with_data(&metadata_store.first_frame_position_string, data,
-                                         length)) {
+                                         length))
+      {
         changed = 1;
         debug(3, "MH First Frame Position String set to: \"%s\"",
               metadata_store.first_frame_position_string);
       }
       break;
     case 'styp':
-      if (update_string_record_with_data(&metadata_store.stream_type, data, length)) {
+      if (update_string_record_with_data(&metadata_store.stream_type, data, length))
+      {
         changed = 1;
         debug(3, "MH Stream Type set to: \"%s\"", metadata_store.stream_type);
       }
       break;
     case 'sdsc':
-      if (update_string_record_with_data(&metadata_store.source_format, data, length)) {
+      if (update_string_record_with_data(&metadata_store.source_format, data, length))
+      {
         changed = 1;
         debug(3, "MH Source Format set to: \"%s\"", metadata_store.source_format);
       }
       break;
     case 'odsc':
-      if (update_string_record_with_data(&metadata_store.output_format, data, length)) {
+      if (update_string_record_with_data(&metadata_store.output_format, data, length))
+      {
         changed = 1;
         debug(3, "MH Output Format set to: \"%s\"", metadata_store.output_format);
       }
       break;
     case 'svip':
-      if (update_string_record_with_data(&metadata_store.server_ip, data, length)) {
+      if (update_string_record_with_data(&metadata_store.server_ip, data, length))
+      {
         changed = 1;
         debug(3, "MH Server IP set to: \"%s\"", metadata_store.server_ip);
       }
@@ -734,42 +884,42 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       metadata_store.player_thread_active = 1;
       break;
     case 'pend':
-/*
-#ifdef CONFIG_AIRPLAY_2
-      // calculate added play time when play ends (typically AirPlay 2 Buffered Stream)
-      if (metadata_store.npi.nowPlayingInfoTimestamp.valid) {
-        uint64_t playing_time =
-            get_absolute_time_in_ns() - metadata_store.npi.nowPlayingInfoTimestamp.value;
-        metadata_store.npi.nowPlayingInfoSubsequentElapsedTime = playing_time;
-        debug(4, "play end setting nowPlayingInfoSubsequentElapsedTime to: %g.",
-              1E-9 * metadata_store.npi.nowPlayingInfoSubsequentElapsedTime);
-      }
-      // play has stopped, so we can invalidate the timestamp time
-      // to signal that Shairport Sync is not playing
-      metadata_store.npi.nowPlayingInfoTimestamp.valid = 0;
-#endif
-*/
+      /*
+      #ifdef CONFIG_AIRPLAY_2
+            // calculate added play time when play ends (typically AirPlay 2 Buffered Stream)
+            if (metadata_store.npi.nowPlayingInfoTimestamp.valid) {
+              uint64_t playing_time =
+                  get_absolute_time_in_ns() - metadata_store.npi.nowPlayingInfoTimestamp.value;
+              metadata_store.npi.nowPlayingInfoSubsequentElapsedTime = playing_time;
+              debug(4, "play end setting nowPlayingInfoSubsequentElapsedTime to: %g.",
+                    1E-9 * metadata_store.npi.nowPlayingInfoSubsequentElapsedTime);
+            }
+            // play has stopped, so we can invalidate the timestamp time
+            // to signal that Shairport Sync is not playing
+            metadata_store.npi.nowPlayingInfoTimestamp.valid = 0;
+      #endif
+      */
       changed = ((metadata_store.player_state != PS_STOPPED) ||
                  (metadata_store.player_thread_active == 1));
       metadata_store.player_state = PS_STOPPED;
       metadata_store.player_thread_active = 0;
       break;
     case 'paus':
-/*
-#ifdef CONFIG_AIRPLAY_2
-      // calculate added play time when play pauses (typically AirPlay 2 Buffered Stream)
-      if (metadata_store.npi.nowPlayingInfoTimestamp.valid) {
-        uint64_t playing_time =
-            get_absolute_time_in_ns() - metadata_store.npi.nowPlayingInfoTimestamp.value;
-        metadata_store.npi.nowPlayingInfoSubsequentElapsedTime = playing_time;
-        debug(4, "anchor pause setting nowPlayingInfoSubsequentElapsedTime to: %g.",
-              1E-9 * metadata_store.npi.nowPlayingInfoSubsequentElapsedTime);
-      }
-      // play has paused, so we can invalidate the timestamp time
-      // to signal that Shairport Sync is not playing
-      metadata_store.npi.nowPlayingInfoTimestamp.valid = 0;
-#endif
-*/
+      /*
+      #ifdef CONFIG_AIRPLAY_2
+            // calculate added play time when play pauses (typically AirPlay 2 Buffered Stream)
+            if (metadata_store.npi.nowPlayingInfoTimestamp.valid) {
+              uint64_t playing_time =
+                  get_absolute_time_in_ns() - metadata_store.npi.nowPlayingInfoTimestamp.value;
+              metadata_store.npi.nowPlayingInfoSubsequentElapsedTime = playing_time;
+              debug(4, "anchor pause setting nowPlayingInfoSubsequentElapsedTime to: %g.",
+                    1E-9 * metadata_store.npi.nowPlayingInfoSubsequentElapsedTime);
+            }
+            // play has paused, so we can invalidate the timestamp time
+            // to signal that Shairport Sync is not playing
+            metadata_store.npi.nowPlayingInfoTimestamp.valid = 0;
+      #endif
+      */
       changed = (metadata_store.player_state != PS_PAUSED);
       metadata_store.player_state = PS_PAUSED;
       break;
@@ -781,7 +931,8 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
             metadata_store.player_state = PS_PLAYING;
             break;
       */
-    case 'pvol': {
+    case 'pvol':
+    {
       // Note: it's assumed that the config.airplay volume has already been correctly set.
       // int32_t actual_volume;
       // int gv = dacp_get_volume(&actual_volume);
@@ -790,12 +941,15 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       //  metadata_store.speaker_volume = actual_volume;
       //  changed = 1;
       //}
-      if (metadata_store.airplay_volume != config.airplay_volume) {
+      if (metadata_store.airplay_volume != config.airplay_volume)
+      {
         metadata_store.airplay_volume = config.airplay_volume;
         changed = 1;
       }
-    } break;
-    default: {
+    }
+    break;
+    default:
+    {
       char typestring[5];
       uint32_t tm = htonl(type);
       memcpy(typestring, &tm, sizeof(uint32_t));
@@ -821,23 +975,32 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
 
 void metadata_hub_close(void) {}
 
-void metadata_hub_thread_cleanup_function(__attribute__((unused)) void *arg) {
+void metadata_hub_thread_cleanup_function(__attribute__((unused)) void *arg)
+{
   // debug(2, "metadata_hub_thread_cleanup_function called");
   metadata_hub_close();
 }
 
-void *metadata_hub_thread_function(__attribute__((unused)) void *ignore) {
+static int metadata_hub_queue_initialised;
+
+void *metadata_hub_thread_function(__attribute__((unused)) void *ignore)
+{
   //  #include <syscall.h>
   //  debug(1, "metadata_hub_thread_function PID %d", syscall(SYS_gettid));
   metadata_package pack;
   pthread_cleanup_push(metadata_hub_thread_cleanup_function, NULL);
-  while (1) {
-    pc_queue_get_item(&metadata_hub_queue, &pack);
+  while (1)
+  {
+    if (pc_queue_get_item(&metadata_hub_queue, &pack) != 0)
+      break;
     pthread_cleanup_push(metadata_pack_cleanup_function, (void *)&pack);
-    if (pack.carrier) {
+    if (pack.carrier)
+    {
       debug(4, "                    hub: type %x, code %x, length %u, message %d.", pack.type,
             pack.code, pack.length, pack.carrier->index_number);
-    } else {
+    }
+    else
+    {
       debug(4, "                    hub: type %x, code %x, length %u.", pack.type, pack.code,
             pack.length);
     }
@@ -845,37 +1008,48 @@ void *metadata_hub_thread_function(__attribute__((unused)) void *ignore) {
     debug(4, "                    hub: done.");
     pthread_cleanup_pop(1);
   }
-  pthread_cleanup_pop(1); // will never happen
+  pthread_cleanup_pop(1);
   pthread_exit(NULL);
 }
 
-void metadata_hub_queue_init() {
+void metadata_hub_queue_init(void)
+{
   // create a pc_queue for the metadata hub
   pc_queue_init(&metadata_hub_queue, (char *)&metadata_hub_queue_items, sizeof(metadata_package),
                 metadata_hub_queue_size, "hub");
+  metadata_hub_queue_initialised = 1;
   if (named_pthread_create(&metadata_hub_thread, NULL, metadata_hub_thread_function, NULL,
-                           "metadata hub") != 0)
+                           "metadata hub") != 0) {
     debug(1, "Failed to create metadata hub thread!");
+  }
 }
 
-void metadata_hub_queue_stop() {
+void metadata_hub_queue_stop(void)
+{
   // debug(2, "metadata stop hub thread.");
-  if (metadata_hub_thread) {
+  if (metadata_hub_thread)
+  {
     pthread_cancel(metadata_hub_thread);
     pthread_join(metadata_hub_thread, NULL);
-    pc_queue_delete(&metadata_hub_queue);
     metadata_hub_thread = 0;
+  }
+  if (metadata_hub_queue_initialised)
+  {
+    metadata_queue_delete(&metadata_hub_queue);
+    metadata_hub_queue_initialised = 0;
   }
   // debug(2, "metadata stop hub done.");
 }
 
 int send_metadata_to_hub_queue(const uint32_t type, const uint32_t code, const char *data,
-                               const uint32_t length, rtsp_message *carrier, int block) {
+                               const uint32_t length, rtsp_message *carrier, int block)
+{
   return send_metadata_to_queue(&metadata_hub_queue, type, code, data, length, carrier, block);
 }
 
 // reset all now playing information
-void metadata_hub_reset_npi(metadata_npi_bundle *npi) {
+void metadata_hub_reset_npi(metadata_npi_bundle *npi)
+{
   debug(4, "metadata_hub_reset_npi");
   invalidate_string_record(&npi->cover_art_pathname);
   npi->item_id.valid = 0;
@@ -902,7 +1076,8 @@ void metadata_hub_reset_npi(metadata_npi_bundle *npi) {
   // npi->nowPlayingInfoTimestamp.valid = 0;
   // npi->nowPlayingInfoPriorElapsedTime = 0;
   // npi->nowPlayingInfoSubsequentElapsedTime = 0;
-  if (npi->npi_plist != NULL) {
+  if (npi->npi_plist != NULL)
+  {
     plist_free(npi->npi_plist);
     npi->npi_plist = NULL;
   }

@@ -43,6 +43,13 @@ int named_pthread_create(pthread_t *restrict thread,
 
 uint64_t get_realtime_in_ns(void) { return 0; }
 
+int send_ssnc_metadata(__attribute__((unused)) const uint32_t code,
+                       __attribute__((unused)) const char *data,
+                       __attribute__((unused)) const uint32_t length,
+                       __attribute__((unused)) const int block) {
+  return 0;
+}
+
 void _debug(const char *filename, const int linenumber, int level,
             const char *format, ...) {
   (void)filename;

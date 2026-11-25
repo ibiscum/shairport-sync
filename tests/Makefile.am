@@ -10,6 +10,13 @@ check_PROGRAMS = \
 	test_audio_pw_safety \
 	test_dacp_safety \
 	test_dacp_lifecycle_safety \
+	test_metadata_core \
+	test_metadata_core_header_api_contract \
+	test_metadata_hub_handle_command_plist_header_self_containment \
+	test_metadata_hub_handle_command_plist_header_self_containment_no_ap2 \
+	test_metadata_hub_handle_command_plist_header_api_contract \
+	test_metadata_hub_header_api_contract \
+	test_metadata_fourcc \
 	test_mdns_minimal \
 	test_mqtt_header_self_containment \
 	test_mqtt_header_api_contract \
@@ -22,6 +29,12 @@ check_PROGRAMS = \
 	test_rtsp_line_regression \
 	test_rtp_minimal \
 	test_tinyhttp_parser_regression
+if USE_METADATA_HUB
+check_PROGRAMS += test_metadata_hub
+endif
+if USE_METADATA_MULTICAST
+check_PROGRAMS += test_metadata_multicast
+endif
 TESTS = $(check_PROGRAMS)
 
 # Keep warnings consistent with the main build and add cmocka flags/libs.
@@ -82,6 +95,50 @@ test_dacp_lifecycle_safety_SOURCES = test_dacp_lifecycle_safety.c
 test_dacp_lifecycle_safety_LDFLAGS = -pthread
 test_dacp_lifecycle_safety_LDADD = $(CMOCKA_LIBS)
 
+test_metadata_core_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_core_SOURCES = test_metadata_core.c
+test_metadata_core_LDFLAGS = -pthread
+
+test_metadata_core_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_core_header_api_contract_SOURCES = test_metadata_core_header_api_contract.c
+test_metadata_core_header_api_contract_LDFLAGS = -pthread
+
+test_metadata_hub_handle_command_plist_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_hub_handle_command_plist_header_self_containment_SOURCES = \
+	test_metadata_hub_handle_command_plist_header_self_containment.c
+test_metadata_hub_handle_command_plist_header_self_containment_LDFLAGS = -pthread
+
+test_metadata_hub_handle_command_plist_header_self_containment_no_ap2_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_hub_handle_command_plist_header_self_containment_no_ap2_SOURCES = \
+	test_metadata_hub_handle_command_plist_header_self_containment_no_ap2.c
+test_metadata_hub_handle_command_plist_header_self_containment_no_ap2_LDFLAGS = -pthread
+
+test_metadata_hub_handle_command_plist_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_hub_handle_command_plist_header_api_contract_SOURCES = \
+	test_metadata_hub_handle_command_plist_header_api_contract.c
+test_metadata_hub_handle_command_plist_header_api_contract_LDFLAGS = -pthread
+
+test_metadata_hub_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_hub_header_api_contract_SOURCES = test_metadata_hub_header_api_contract.c
+test_metadata_hub_header_api_contract_LDFLAGS = -pthread
+
+if USE_METADATA_HUB
+test_metadata_hub_CFLAGS = $(AM_CFLAGS) -pthread -UCONFIG_OPENSSL -UCONFIG_MBEDTLS -UCONFIG_POLARSSL -UCONFIG_AIRPLAY_2
+test_metadata_hub_SOURCES = test_metadata_hub.c
+test_metadata_hub_LDFLAGS = -pthread
+endif
+
+if USE_METADATA_MULTICAST
+test_metadata_multicast_CFLAGS = $(AM_CFLAGS) -pthread
+test_metadata_multicast_SOURCES = test_metadata_multicast.c
+test_metadata_multicast_LDFLAGS = -pthread
+endif
+
+test_metadata_fourcc_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_metadata_fourcc_SOURCES = test_metadata_fourcc.c
+test_metadata_fourcc_LDFLAGS = -pthread
+test_metadata_fourcc_LDADD = $(CMOCKA_LIBS)
+
 test_mdns_minimal_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_mdns_minimal_SOURCES = \
 	test_mdns_minimal.c \
@@ -90,34 +147,34 @@ test_mdns_minimal_SOURCES = \
 test_mdns_minimal_LDFLAGS = -pthread
 test_mdns_minimal_LDADD = $(CMOCKA_LIBS)
 
-test_mqtt_header_self_containment_CFLAGS = -pthread
+test_mqtt_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
 test_mqtt_header_self_containment_SOURCES = test_mqtt_header_self_containment.c
 test_mqtt_header_self_containment_LDFLAGS = -pthread
 
-test_mqtt_header_api_contract_CFLAGS = -pthread
+test_mqtt_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
 test_mqtt_header_api_contract_SOURCES = test_mqtt_header_api_contract.c
 test_mqtt_header_api_contract_LDFLAGS = -pthread
 
-test_tinysvcmdns_labels_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
+test_tinysvcmdns_labels_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
 	-include $(top_srcdir)/tests/test_tinysvcmdns_harness.h
 test_tinysvcmdns_labels_regression_SOURCES = \
 	test_tinysvcmdns_labels_regression.c \
 	test_tinysvcmdns_label_stubs.c \
-	$(top_srcdir)/tinysvcmdns.c
+	$(top_srcdir)/mdns/tinysvcmdns/tinysvcmdns.c
 test_tinysvcmdns_labels_regression_LDFLAGS = -pthread -Wl,--gc-sections
 test_tinysvcmdns_labels_regression_LDADD = $(CMOCKA_LIBS)
 
-test_tinysvcmdns_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_tinysvcmdns_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_tinysvcmdns_regression_SOURCES = test_tinysvcmdns_regression.c
 test_tinysvcmdns_regression_LDFLAGS = -pthread
 test_tinysvcmdns_regression_LDADD = $(CMOCKA_LIBS)
 
-test_nqptp_shm_structures_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_nqptp_shm_structures_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_nqptp_shm_structures_regression_SOURCES = test_nqptp_shm_structures_regression.c
 test_nqptp_shm_structures_regression_LDFLAGS = -pthread
 test_nqptp_shm_structures_regression_LDADD = $(CMOCKA_LIBS)
 
-test_ptp_utilities_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
+test_ptp_utilities_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
 	--include $(top_srcdir)/utilities/debug.h \
 	-include $(top_srcdir)/tests/test_ptp_utilities_harness.h
 test_ptp_utilities_regression_SOURCES = \
@@ -127,7 +184,7 @@ test_ptp_utilities_regression_SOURCES = \
 test_ptp_utilities_regression_LDFLAGS = -pthread -Wl,--gc-sections
 test_ptp_utilities_regression_LDADD = $(CMOCKA_LIBS)
 
-test_player_common_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_player_common_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_player_common_regression_SOURCES = test_player_common_regression.c
 test_player_common_regression_LDFLAGS = -pthread
 test_player_common_regression_LDADD = $(CMOCKA_LIBS)
@@ -137,14 +194,14 @@ test_player_common_unit_SOURCES = test_player_common_unit.c
 test_player_common_unit_LDFLAGS = -pthread
 test_player_common_unit_LDADD = $(CMOCKA_LIBS)
 
-test_rtsp_line_regression_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_rtsp_line_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_rtsp_line_regression_SOURCES = \
 	test_rtsp_line_regression.c \
 	$(top_srcdir)/utilities/rtsp_line_utilities.c
 test_rtsp_line_regression_LDFLAGS = -pthread
 test_rtsp_line_regression_LDADD = $(CMOCKA_LIBS)
 
-test_rtp_minimal_CFLAGS = $(CMOCKA_CFLAGS) -pthread
+test_rtp_minimal_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_rtp_minimal_SOURCES = \
 	test_rtp_minimal.c \
 	test_rtp_minimal_stubs.c \

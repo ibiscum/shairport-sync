@@ -5,7 +5,7 @@
 
 #include <cmocka.h>
 
-#include "tinysvcmdns.h"
+#include "mdns/tinysvcmdns/tinysvcmdns.h"
 
 static void test_create_nlabel_normalizes_ascii_case(void **state) {
   (void)state;

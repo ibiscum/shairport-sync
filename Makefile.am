@@ -18,18 +18,22 @@ endif
 
 lib_pair_ap_a_CFLAGS = -Wall -g -DCONFIG_GCRYPT -pthread --include=utilities/debug.h
 lib_tinyhttp_a_CFLAGS = -pthread
-lib_dbus_interface_a_CFLAGS = -pthread
-lib_mpris_interface_a_CFLAGS = -pthread
+lib_dbus_interface_a_CFLAGS = -pthread @glib_CFLAGS@
+lib_mpris_interface_a_CFLAGS = -pthread @glib_CFLAGS@
 
 bin_PROGRAMS = shairport-sync
 
-# check_PROGRAMS = tests/test_audio_bitrate tests/test_metadata_queue
-# TESTS = $(check_PROGRAMS)
-# tests_test_audio_bitrate_SOURCES = tests/test_audio_bitrate.c audio_bitrate.h
-# tests_test_audio_bitrate_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
-# tests_test_metadata_queue_SOURCES = tests/test_metadata_queue.c
-# tests_test_metadata_queue_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
-# tests_test_metadata_queue_LDFLAGS = -pthread
+check_PROGRAMS = tests/test_audio_bitrate tests/test_metadata_queue tests/test_pc_queue_header_api_contract
+TESTS = $(check_PROGRAMS)
+tests_test_audio_bitrate_SOURCES = tests/test_audio_bitrate.c tests/test_audio_bitrate_stubs.c metadata/audio_bitrate.c
+tests_test_audio_bitrate_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_audio_bitrate_LDFLAGS = -pthread
+tests_test_metadata_queue_SOURCES = tests/test_metadata_queue.c
+tests_test_metadata_queue_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_metadata_queue_LDFLAGS = -pthread
+tests_test_pc_queue_header_api_contract_SOURCES = tests/test_pc_queue_header_api_contract.c
+tests_test_pc_queue_header_api_contract_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)
+tests_test_pc_queue_header_api_contract_LDFLAGS = -pthread
 
 # BUILT_SOURCES get built before anything else (?)
 
@@ -46,6 +50,7 @@ shairport_sync_SOURCES = shairport.c bonjour_strings.c mdns/mdns.c common.c rtp.
   utilities/debug.c \
   utilities/network_utilities.c \
   utilities/rtsp_message_utilities.c \
+	utilities/rtsp_line_utilities.c \
   utilities/string_utilities.c \
   utilities/general_utilities.c \
   utilities/exit.c
@@ -216,6 +221,8 @@ endif
 endif
 
 if USE_DBUS
+AM_CFLAGS += @glib_CFLAGS@
+shairport_sync_LDADD += @glib_LIBS@
 shairport_sync_LDADD += lib_dbus_interface.a
 noinst_LIBRARIES += lib_dbus_interface.a
 lib_dbus_interface_a_SOURCES = dbus-interface.c
@@ -230,6 +237,8 @@ dbus-interface.h: dbus-interface.c
 endif
 
 if USE_MPRIS
+AM_CFLAGS += @glib_CFLAGS@
+shairport_sync_LDADD += @glib_LIBS@
 shairport_sync_LDADD += lib_mpris_interface.a
 noinst_LIBRARIES += lib_mpris_interface.a
 lib_mpris_interface_a_SOURCES = mpris-interface.c
@@ -250,7 +259,7 @@ if USE_DBUS_CLIENT
 noinst_PROGRAMS += shairport-sync-dbus-test-client
 shairport_sync_dbus_test_client_SOURCES = shairport-sync-dbus-test-client.c \
   utilities/g_variant_pretty_print.c
-shairport_sync_dbus_test_client_LDADD = lib_dbus_interface.a
+shairport_sync_dbus_test_client_LDADD = lib_dbus_interface.a @glib_LIBS@
 endif
 
 if USE_MPRIS_CLIENT

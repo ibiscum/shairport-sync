@@ -132,22 +132,19 @@ void _metadata_hub_modify_prolog(const char *filename, const int linenumber);
 void _metadata_hub_modify_epilog(
     int modified, const char *filename,
     const int linenumber); // set to true if modifications occurred, 0 otherwise
-
-/*
 // these are for safe reading
 void _metadata_hub_read_prolog(const char *filename, const int linenumber);
 void _metadata_hub_read_epilog(const char *filename, const int linenumber);
-*/
 
 #define metadata_hub_modify_prolog(void) _metadata_hub_modify_prolog(__FILE__, __LINE__)
 #define metadata_hub_modify_epilog(modified)                                                       \
   _metadata_hub_modify_epilog(modified, __FILE__, __LINE__)
 
 #define metadata_hub_read_prolog(void) _metadata_hub_read_prolog(__FILE__, __LINE__)
-#define metadata_hub_read_epilog(void) _metadata_hub_modify_epilog(0, __FILE__, __LINE__)
+#define metadata_hub_read_epilog(void) _metadata_hub_read_epilog(__FILE__, __LINE__)
 
 // metadata queue stuff
-void metadata_hub_queue_init();
-void metadata_hub_queue_stop();
+void metadata_hub_queue_init(void);
+void metadata_hub_queue_stop(void);
 int send_metadata_to_hub_queue(const uint32_t type, const uint32_t code, const char *data,
                                const uint32_t length, rtsp_message *carrier, int block);

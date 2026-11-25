@@ -4,7 +4,7 @@
 
 #include <cmocka.h>
 
-#include "tinysvcmdns.h"
+#include "mdns/tinysvcmdns/tinysvcmdns.h"
 
 static void test_ptr_name_prefers_explicit_name(void **state) {
   (void)state;

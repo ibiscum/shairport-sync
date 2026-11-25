@@ -184,13 +184,15 @@ static void on_message(__attribute__((unused)) struct mosquitto *mosq,
     }
   } break;
 #endif
-      }
-      free(payload);
-      return;
+  default:
+    if (commands[it].name != NULL) {
+      debug(2, "[MQTT]: Calling Remote Command: %s\n", commands[it].name);
+      remote_simple_command(commands[it].command);
     }
+    break;
   }
 
-  if (commands[it] == NULL)
+  if (commands[it].name == NULL)
     debug(2, "[MQTT]: Unrecognised command payload ignored: %s", command);
 
   free(payload);
@@ -628,7 +630,8 @@ void *metadata_mqtt_thread_function(__attribute__((unused)) void *ignore) {
   metadata_package pack;
   pthread_cleanup_push(metadata_mqtt_thread_cleanup_function, NULL);
   while (1) {
-    pc_queue_get_item(&metadata_mqtt_queue, &pack);
+    if (pc_queue_get_item(&metadata_mqtt_queue, &pack) != 0)
+      break;
     pthread_cleanup_push(metadata_pack_cleanup_function, (void *)&pack);
     if (pack.carrier) {
       debug(3, "mqtt: type " MULTICHAR4_FMT ", code " MULTICHAR4_FMT ", length %u, message %d.",
@@ -644,7 +647,7 @@ void *metadata_mqtt_thread_function(__attribute__((unused)) void *ignore) {
 
     pthread_cleanup_pop(1);
   }
-  pthread_cleanup_pop(1); // will never happen
+  pthread_cleanup_pop(1);
   pthread_exit(NULL);
 }
 
@@ -659,7 +662,7 @@ void metadata_mqtt_queue_init() {
   if (named_pthread_create(&metadata_mqtt_thread, NULL, metadata_mqtt_thread_function, NULL,
                            "metadata mqtt") != 0) {
     metadata_mqtt_thread = 0;
-    pc_queue_delete(&metadata_mqtt_queue);
+    metadata_queue_delete(&metadata_mqtt_queue);
     metadata_mqtt_queue_initialised = 0;
     debug(1, "Failed to create metadata mqtt thread!");
   }
@@ -673,7 +676,7 @@ void metadata_mqtt_queue_stop() {
   }
 
   if (metadata_mqtt_queue_initialised) {
-    pc_queue_delete(&metadata_mqtt_queue);
+    metadata_queue_delete(&metadata_mqtt_queue);
     metadata_mqtt_queue_initialised = 0;
   }
 

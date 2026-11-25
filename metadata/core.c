@@ -50,13 +50,11 @@
 #include "mqtt.h"
 #endif
 
-// Metadata is not used by shairport-sync.
-// Instead we send all metadata to a fifo pipe, so that other apps can listen to
-// the pipe and use the metadata.
+// Metadata is not consumed internally by Shairport Sync.
+// Instead, it is forwarded to enabled outputs (pipe, multicast, metadata hub, MQTT).
 
 // We use two 4-character codes to identify each piece of data and we send the
-// data itself, if any,
-// in base64 form.
+// data itself, if any.
 
 // The first 4-character code, called the "type", is either:
 //    'core' for all the regular metadadata coming from iTunes, etc., or
@@ -161,7 +159,7 @@ static int metadata_dup_data_or_log(pc_queue *queue, metadata_package *pack, con
     debug(1,
           "metadata queue \"%s\": NULL data with non-zero length %u for type %x, code %x. "
           "Dropping item.",
-          queue->name, length, pack->type, pack->code);
+          queue->name ? queue->name : "(unnamed)", length, pack->type, pack->code);
     return EINVAL;
   }
 
@@ -172,7 +170,7 @@ static int metadata_dup_data_or_log(pc_queue *queue, metadata_package *pack, con
     debug(1,
           "metadata queue \"%s\": failed to duplicate data item: type %x, code %x, "
           "length %u.",
-          queue->name, pack->type, pack->code, pack->length);
+          queue->name ? queue->name : "(unnamed)", pack->type, pack->code, pack->length);
     return ENOMEM;
   }
 
@@ -187,6 +185,19 @@ void metadata_pack_cleanup_function(void *arg) {
   else if (pack->data)
     free(pack->data);
   // debug(1, "metadata_pack_cleanup_function exit");
+}
+
+void metadata_queue_delete(pc_queue *queue) {
+  while (queue->count != 0) {
+    metadata_package pack;
+    int rc = pc_queue_get_item(queue, &pack);
+    if (rc != 0) {
+      die("Could not drain metadata queue: error %d.", rc);
+      return;
+    }
+    metadata_pack_cleanup_function(&pack);
+  }
+  pc_queue_delete(queue);
 }
 
 void metadata_init(void) {
@@ -286,7 +297,9 @@ int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t 
   }
 
   // debug(1, "send_metadata_to_queue %x/%x", type, code);
-  int rc = pc_queue_add_item(queue, &pack, block);
+  int rc;
+  pthread_cleanup_push(metadata_pack_cleanup_function, &pack);
+  rc = pc_queue_add_item(queue, &pack, block);
   if (rc != 0) {
     if (pack.carrier) {
       if (rc == EWOULDBLOCK)
@@ -294,19 +307,18 @@ int send_metadata_to_queue(pc_queue *queue, const uint32_t type, const uint32_t 
               "metadata queue \"%s\" full, dropping message item: type %x, code %x, data %" PRIxPTR
               ", "
               "length %u, message %d.",
-              queue->name, pack.type, pack.code, (uintptr_t)pack.data, pack.length,
-              pack.carrier->index_number);
-      msg_free(&pack.carrier);
+              queue->name ? queue->name : "(unnamed)", pack.type, pack.code, (uintptr_t)pack.data,
+              pack.length, pack.carrier->index_number);
     } else {
       if (rc == EWOULDBLOCK)
         debug(2,
               "metadata queue \"%s\" full, dropping data item: type %x, code %x, data %" PRIxPTR
               ", length %u.",
-              queue->name, pack.type, pack.code, (uintptr_t)pack.data, pack.length);
-      if (pack.data)
-        free(pack.data);
+              queue->name ? queue->name : "(unnamed)", pack.type, pack.code, (uintptr_t)pack.data,
+              pack.length);
     }
   }
+  pthread_cleanup_pop(rc != 0);
   return rc;
 }
 
@@ -353,5 +365,5 @@ int send_metadata(const uint32_t type, const uint32_t code, const char *data, co
 
 int send_ssnc_metadata(const uint32_t code, const char *data, const uint32_t length,
                        const int block) {
-  return send_metadata('ssnc', code, data, length, NULL, block);
+  return send_metadata(METADATA_FOURCC('s', 's', 'n', 'c'), code, data, length, NULL, block);
 }

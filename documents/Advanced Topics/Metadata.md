@@ -75,11 +75,11 @@ Calculate the average bitrate in bits per second as
 `payload_bytes * 8 * sample_rate / input_sample_frames`.
 For example, `64000/96000/48000` gives 256000 bits per second.
 
-The counts accumulate since the last reset. The first report follows at least
-two seconds of decoded input audio; later reports follow about one more second
-of input audio. Buffered audio can arrive ahead of playback, so a report may
-include audio that has not yet played. This is not a sliding average or a
-guaranteed average for one track.
+The counts accumulate since the last reset. Reporting cadence is controlled by
+`metadata.bitrate_stats_interval` when it is greater than zero. If the interval
+is not positive, reports are not published. Buffered audio can arrive ahead of
+playback, so a report may include audio that has not yet played. This is not a
+sliding average or a guaranteed average for one track.
 
 The meter resets on pause or stop, input format changes, Classic/realtime flush,
 immediate buffered flush, activation of a deferred flush, buffered timestamp

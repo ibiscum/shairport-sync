@@ -1500,20 +1500,19 @@ static int get_ptp_anchor_local_time_info_extended(rtsp_conn_info *conn,
 
         if (actual_clock_id == conn->anchor_clock) {
           conn->last_anchor_rtptime = conn->anchor_rtptime;
+          conn->last_anchor_rtptime_extended = conn->anchor_rtptime_extended;
           conn->last_anchor_local_time = conn->anchor_time - actual_offset;
-          conn->last_anchor_time_of_update = time_now;
-          if (conn->last_anchor_info_is_valid == 0)
+          if (conn->last_anchor_validity_start_time == 0)
             conn->last_anchor_validity_start_time = start_of_mastership;
-          conn->last_anchor_info_is_valid = 1;
         } else {
           debug(3, "Current master clock %" PRIx64 " and anchor_clock %" PRIx64 " are different",
                 actual_clock_id, conn->anchor_clock);
           // the anchor clock and the actual clock are different
 
-          if (conn->last_anchor_info_is_valid != 0) {
+          if (conn->last_anchor_validity_start_time != 0) {
 
             int64_t time_since_last_update =
-                get_absolute_time_in_ns() - conn->last_anchor_time_of_update;
+                get_absolute_time_in_ns() - conn->last_anchor_validity_start_time;
             if (time_since_last_update > 5000000000) {
               int64_t duration_of_mastership = time_now - start_of_mastership;
               debug(2,
@@ -1531,7 +1530,10 @@ static int get_ptp_anchor_local_time_info_extended(rtsp_conn_info *conn,
 
               conn->anchor_time = conn->last_anchor_local_time + actual_offset;
               conn->anchor_clock = actual_clock_id;
+              conn->last_anchor_validity_start_time = start_of_mastership;
             }
+            }
+          }
 
       } else {
         response = clock_not_valid; // hasn't been master for long enough...

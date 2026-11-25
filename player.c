@@ -5499,6 +5499,7 @@ static void export_session_identity(rtsp_conn_info *conn) {
 
 int player_play(rtsp_conn_info *conn) {
   debug(2, "Connection %d: player_play.", conn->connection_number);
+  int response = 0;
   export_session_identity(conn);
   command_start(); // before startup, and before the prepare() method runs
   // give the output device as much advance warning as possible to get ready

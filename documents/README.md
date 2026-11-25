@@ -24,6 +24,9 @@ Note: [Shairport-Main-Flow.md](Shairport-Main-Flow.md) includes mDNS contract no
 - [Dummy-Audio-Backend-Flow.md](Dummy-Audio-Backend-Flow.md)
 - [AO-Audio-Backend-Flow.md](AO-Audio-Backend-Flow.md)
 
+Note: [Pipe-Audio-Backend-Flow.md](Pipe-Audio-Backend-Flow.md) includes a dedicated section on
+pipe output format/rate/channel capabilities and defaults.
+
 ## D-Bus
 
 - [D-Bus.md](D-Bus.md)

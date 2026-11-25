@@ -144,6 +144,7 @@ void activity_thread_cleanup_handler(__attribute__((unused)) void *arg) {
 void *activity_monitor_thread_code(void *arg) {
   pthread_cleanup_push(activity_thread_cleanup_handler, arg);
 
+  int rc;
   uint64_t sec;
   uint64_t nsec;
   struct timespec time_for_wait;

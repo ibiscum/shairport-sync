@@ -274,13 +274,11 @@ static void test_set_and_reset_ptp_anchor_info(void **state) {
   assert_int_equal(conn.anchor_rtptime, 1000U);
   assert_int_equal(conn.anchor_time, 2000ULL);
 
-  conn.last_anchor_info_is_valid = 1;
   conn.long_time_notification_done = 1;
   conn.previous_ptp_offset = 123;
   conn.previous_ptp_clock_id = 456;
   reset_ptp_anchor_info(&conn);
   assert_int_equal(conn.anchor_remote_info_is_valid, 0);
-  assert_int_equal(conn.last_anchor_info_is_valid, 0);
   assert_int_equal(conn.long_time_notification_done, 0);
   assert_int_equal(conn.previous_ptp_offset, 0);
   assert_int_equal(conn.previous_ptp_clock_id, 0);

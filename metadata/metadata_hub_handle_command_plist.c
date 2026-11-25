@@ -38,6 +38,8 @@
 #include "mqtt.h"
 #endif
 
+#ifdef CONFIG_AIRPLAY_2
+
 // merge items in the second plist into the first
 
 void plist_merge(plist_t base, plist_t changes) {
@@ -549,3 +551,10 @@ void metadata_hub_handle_command_plist(rtsp_conn_info *conn, const plist_t comma
     }
   }
 }
+
+#else
+
+void metadata_hub_handle_command_plist(__attribute__((unused)) rtsp_conn_info *conn,
+                                       __attribute__((unused)) const void *command_dict) {}
+
+#endif

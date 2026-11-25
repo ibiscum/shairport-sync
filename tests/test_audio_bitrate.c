@@ -2,7 +2,25 @@
 #undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
-#include "audio_bitrate.h"
+#include <string.h>
+#include "metadata/audio_bitrate.h"
+#include "metadata/core.h"
+
+void test_audio_bitrate_stub_reset_metadata(void);
+void test_audio_bitrate_stub_set_time_ns(uint64_t now_ns);
+unsigned test_audio_bitrate_stub_send_count(void);
+uint32_t test_audio_bitrate_stub_last_code(void);
+const char *test_audio_bitrate_stub_last_payload(void);
+
+static void init_conn_mutexes(rtsp_conn_info *conn) {
+  assert(!pthread_mutex_init(&conn->ab_mutex, NULL));
+  assert(!pthread_mutex_init(&conn->flush_mutex, NULL));
+}
+
+static void destroy_conn_mutexes(rtsp_conn_info *conn) {
+  assert(!pthread_mutex_destroy(&conn->ab_mutex));
+  assert(!pthread_mutex_destroy(&conn->flush_mutex));
+}
 
 int main(void) {
   audio_bitrate_meter meter = {0};
@@ -78,5 +96,91 @@ int main(void) {
   assert(audio_bitrate_add(&meter, 360000, 96000, 48000, 0, 0) ==
          (AUDIO_BITRATE_RESET | AUDIO_BITRATE_REPORT));
   assert(meter.bytes * 8 * meter.rate / meter.samples == 1440000);
+
+  /* Zero and negative intervals are clamped and keep a stable 5-second cadence. */
+  config.bitrate_stats_interval = 0.0;
+  audio_bitrate_reset(&meter);
+  reports = 0;
+  for (unsigned i = 0; i < 470; i++)
+    reports += !!audio_bitrate_add(&meter, 680 + i % 3, 1024, 48000, i, i * 1024);
+  assert(reports == 2);
+
+  config.bitrate_stats_interval = -2.0;
+  audio_bitrate_reset(&meter);
+  reports = 0;
+  for (unsigned i = 0; i < 470; i++)
+    reports += !!audio_bitrate_add(&meter, 680 + i % 3, 1024, 48000, i, i * 1024);
+  assert(reports == 2);
+
+  /* Receiver counter reports obey a positive interval and include current totals. */
+  config.bitrate_stats_interval = 1.0;
+  rtsp_conn_info conn = {0};
+  init_conn_mutexes(&conn);
+  conn.missing_packets = 7;
+  conn.too_late_packets = 5;
+  conn.resend_requests = 11;
+  test_audio_bitrate_stub_reset_metadata();
+  test_audio_bitrate_stub_set_time_ns(1000000000ULL);
+  report_player_counters(&conn);
+  assert(test_audio_bitrate_stub_send_count() == 1);
+  assert(test_audio_bitrate_stub_last_code() == METADATA_FOURCC('a', 'r', 's', 't'));
+  assert(strcmp(test_audio_bitrate_stub_last_payload(), "7/5/11") == 0);
+
+  test_audio_bitrate_stub_set_time_ns(1500000000ULL);
+  report_player_counters(&conn);
+  assert(test_audio_bitrate_stub_send_count() == 1);
+
+  test_audio_bitrate_stub_set_time_ns(2100000000ULL);
+  report_player_counters(&conn);
+  assert(test_audio_bitrate_stub_send_count() == 2);
+
+  config.bitrate_stats_interval = 0.0;
+  test_audio_bitrate_stub_set_time_ns(3200000000ULL);
+  report_player_counters(&conn);
+  assert(test_audio_bitrate_stub_send_count() == 2);
+
+  config.bitrate_stats_interval = -1.0;
+  test_audio_bitrate_stub_set_time_ns(4300000000ULL);
+  report_player_counters(&conn);
+  assert(test_audio_bitrate_stub_send_count() == 2);
+  destroy_conn_mutexes(&conn);
+
+  /* Generation/accounting path: current generation only, with reset on timestamp discontinuity. */
+  config.bitrate_stats_interval = 1.0;
+  memset(&conn, 0, sizeof(conn));
+  init_conn_mutexes(&conn);
+  test_audio_bitrate_stub_reset_metadata();
+
+  uint64_t generation = input_bitrate_packet_generation(&conn, ALAC_44100_S16_2, 10, 3520, 0);
+  assert(generation == 1);
+  assert(conn.input_bitrate_generation == 1);
+  assert(conn.input_bitrate_ssrc == ALAC_44100_S16_2);
+  account_input_bitrate(&conn, ALAC_44100_S16_2, 1000, 352, 10, 3520, generation);
+  assert(conn.input_bitrate.bytes == 1000 && conn.input_bitrate.samples == 352);
+
+  /* Stale generation token is ignored. */
+  account_input_bitrate(&conn, ALAC_44100_S16_2, 500, 352, 11, 3872, generation - 1);
+  assert(conn.input_bitrate.bytes == 1000 && conn.input_bitrate.samples == 352);
+
+  /* Flush state pauses accounting and generation changes. */
+  conn.flush_requested = 1;
+  assert(input_bitrate_packet_generation(&conn, ALAC_44100_S16_2, 11, 3872, 0) == 1);
+  account_input_bitrate(&conn, ALAC_44100_S16_2, 500, 352, 11, 3872, generation);
+  assert(conn.input_bitrate.bytes == 1000 && conn.input_bitrate.samples == 352);
+  conn.flush_requested = 0;
+
+  /* Non-duplicate timestamp-gap discontinuity resets the meter and emits 0/0/0 once. */
+  generation = input_bitrate_packet_generation(&conn, ALAC_44100_S16_2, 12, 4224, 128);
+  assert(generation == 2);
+  assert(conn.input_bitrate.bytes == 0 && conn.input_bitrate.samples == 0);
+  assert(test_audio_bitrate_stub_send_count() == 1);
+  assert(test_audio_bitrate_stub_last_code() == METADATA_FOURCC('a', 'b', 'r', 't'));
+  assert(strcmp(test_audio_bitrate_stub_last_payload(), "0/0/0") == 0);
+
+  account_input_bitrate(&conn, ALAC_44100_S16_2, 1200, 352, 12, 4224, generation);
+  assert(conn.input_bitrate.bytes == 1200 && conn.input_bitrate.samples == 352);
+  destroy_conn_mutexes(&conn);
+
+  config.bitrate_stats_interval = 1.25;
   printf("Audio bitrate tests passed; persistent state=%zu bytes\n", sizeof(meter));
 }

@@ -37,9 +37,20 @@ void pc_queue_init(pc_queue *the_queue, char *items, size_t item_size, uint32_t 
     debug(4, "Creating metadata queue \"%s\".", name);
   else
     debug(1, "Creating an unnamed metadata queue.");
-  pthread_mutex_init(&the_queue->pc_queue_lock, NULL);
-  pthread_cond_init(&the_queue->pc_queue_item_added_signal, NULL);
-  pthread_cond_init(&the_queue->pc_queue_item_removed_signal, NULL);
+  int rc = pthread_mutex_init(&the_queue->pc_queue_lock, NULL);
+  if (rc)
+    die("Error %d initializing metadata queue mutex: %s", rc, strerror(rc));
+  rc = pthread_cond_init(&the_queue->pc_queue_item_added_signal, NULL);
+  if (rc) {
+    pthread_mutex_destroy(&the_queue->pc_queue_lock);
+    die("Error %d initializing metadata queue condition: %s", rc, strerror(rc));
+  }
+  rc = pthread_cond_init(&the_queue->pc_queue_item_removed_signal, NULL);
+  if (rc) {
+    pthread_cond_destroy(&the_queue->pc_queue_item_added_signal);
+    pthread_mutex_destroy(&the_queue->pc_queue_lock);
+    die("Error %d initializing metadata queue condition: %s", rc, strerror(rc));
+  }
   the_queue->item_size = item_size;
   the_queue->items = items;
   the_queue->count = 0;
@@ -48,8 +59,15 @@ void pc_queue_init(pc_queue *the_queue, char *items, size_t item_size, uint32_t 
   the_queue->eoq = 0;
   if (name == NULL)
     the_queue->name = NULL;
-  else
+  else {
     the_queue->name = strdup(name);
+    if (the_queue->name == NULL) {
+      pthread_cond_destroy(&the_queue->pc_queue_item_removed_signal);
+      pthread_cond_destroy(&the_queue->pc_queue_item_added_signal);
+      pthread_mutex_destroy(&the_queue->pc_queue_lock);
+      die("Could not allocate metadata queue name.");
+    }
+  }
 }
 
 void pc_queue_delete(pc_queue *the_queue) {
@@ -99,15 +117,16 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
       return rc;
     }
     pthread_cleanup_push(pc_queue_cleanup_handler, (void *)the_queue);
-    // leave this out if you want this to return if the queue is already full
-    // irrespective of the block flag.
-    /*
-                while (the_queue->count == the_queue->capacity) {
-                        rc = pthread_cond_wait(&the_queue->pc_queue_item_removed_signal,
-       &the_queue->pc_queue_lock); if (rc) debug(1, "Error waiting for item to be removed");
-                }
-                */
     if (the_queue->count < the_queue->capacity) {
+      // Logging may cancel the producer, so do it before the item is committed.
+      if (the_queue->count + 1 == the_queue->capacity)
+        debug(3, "metadata queue \"%s\": is now full with %u items in it!",
+              the_queue->name ? the_queue->name : "(unnamed)", the_queue->count + 1);
+      // The waiter cannot reacquire the mutex until after the item is committed.
+      rc = pthread_cond_signal(&the_queue->pc_queue_item_added_signal);
+      if (rc)
+        debug(1, "metadata queue \"%s\": error signalling after pc_queue_add_item",
+              the_queue->name ? the_queue->name : "(unnamed)");
       uint32_t i = the_queue->eoq;
       void *p = (char *)the_queue->items + the_queue->item_size * i;
       //    void * p = &the_queue->qbase + the_queue->item_size*the_queue->eoq;
@@ -120,21 +139,12 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
         i = 0;
       the_queue->eoq = i;
       the_queue->count++;
-      // debug(2,"metadata queue+ \"%s\" %d/%d.", the_queue->name, the_queue->count,
-      // the_queue->capacity);
-      if (the_queue->count == the_queue->capacity)
-        debug(3, "metadata queue \"%s\": is now full with %d items in it!", the_queue->name,
-              the_queue->count);
-      rc = pthread_cond_signal(&the_queue->pc_queue_item_added_signal);
-      if (rc)
-        debug(1, "metadata queue \"%s\": error signalling after pc_queue_add_item",
-              the_queue->name);
     } else {
       response = EWOULDBLOCK; // a bit arbitrary, this.
       debug(3,
-            "metadata queue \"%s\": is already full with %d items in it. Not adding this item to "
+            "metadata queue \"%s\": is already full with %u items in it. Not adding this item to "
             "the queue.",
-            the_queue->name, the_queue->count);
+            the_queue->name ? the_queue->name : "(unnamed)", the_queue->count);
     }
     pthread_cleanup_pop(1); // unlock the queue lock.
   } else {
@@ -146,39 +156,46 @@ int pc_queue_add_item(pc_queue *the_queue, const void *the_stuff, int block) {
 
 int pc_queue_get_item(pc_queue *the_queue, void *the_stuff) {
   int rc;
+  int response = 0;
   if (the_queue) {
     rc = pthread_mutex_lock(&the_queue->pc_queue_lock);
     if (rc) {
-      debug(1, "metadata queue \"%s\": error locking for pc_queue_get_item", the_queue->name);
+      debug(1, "metadata queue \"%s\": error locking for pc_queue_get_item",
+            the_queue->name ? the_queue->name : "(unnamed)");
       return rc;
     }
     pthread_cleanup_push(pc_queue_cleanup_handler, (void *)the_queue);
     while (the_queue->count == 0) {
       rc = pthread_cond_wait(&the_queue->pc_queue_item_added_signal, &the_queue->pc_queue_lock);
-      if (rc)
-        debug(1, "metadata queue \"%s\": error waiting for item to be added", the_queue->name);
+      if (rc) {
+        debug(1, "metadata queue \"%s\": error %d waiting for item to be added",
+              the_queue->name ? the_queue->name : "(unnamed)", rc);
+        response = rc;
+        break;
+      }
     }
-    uint32_t i = the_queue->toq;
-    //    void * p = &the_queue->qbase + the_queue->item_size*the_queue->toq;
-    void *p = (char *)the_queue->items + the_queue->item_size * i;
-    memcpy(the_stuff, p, the_queue->item_size);
-
-    // update the pointer
-    i++;
-    if (i == the_queue->capacity)
-      // fold pointer if necessary
-      i = 0;
-    the_queue->toq = i;
-    the_queue->count--;
-    debug(4, "metadata queue- \"%s\" %d/%d.", the_queue->name, the_queue->count,
-          the_queue->capacity);
-    rc = pthread_cond_signal(&the_queue->pc_queue_item_removed_signal);
-    if (rc)
-      debug(1, "metadata queue \"%s\": error signalling after pc_queue_get_item", the_queue->name);
+    if (response == 0) {
+      // Logging may be a cancellation point; keep the item queued until it is done.
+      debug(4, "metadata queue- \"%s\" %u/%u.",
+            the_queue->name ? the_queue->name : "(unnamed)", the_queue->count - 1,
+            the_queue->capacity);
+      rc = pthread_cond_signal(&the_queue->pc_queue_item_removed_signal);
+      if (rc)
+        debug(1, "metadata queue \"%s\": error signalling after pc_queue_get_item",
+              the_queue->name ? the_queue->name : "(unnamed)");
+      uint32_t i = the_queue->toq;
+      void *p = (char *)the_queue->items + the_queue->item_size * i;
+      memcpy(the_stuff, p, the_queue->item_size);
+      i++;
+      if (i == the_queue->capacity)
+        i = 0;
+      the_queue->toq = i;
+      the_queue->count--;
+    }
     pthread_cleanup_pop(1); // unlock the queue lock.
   } else {
     debug(1, "Removing an item from a NULL queue");
     return EINVAL;
   }
-  return 0;
+  return response;
 }

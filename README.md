@@ -84,4 +84,28 @@ Timestamps are referenced relative to the source computer's clock – the "sourc
 ./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire
 
 ./configure --with-ssl=openssl --with-cmocka-tests --with-pkg-config --with-avahi --with-alsa --with-pipewire --with-airplay-2
+
+./configure --with-ssl=openssl --with-pkg-config --with-airplay-2 --with-alsa --with-avahi --with-cmocka-tests --with-pipe --with-metadata --with-dbus-interface --with-dbus-test-client
 ```
+
+### Note on `pipe` output format/rate
+
+The `pipe` backend is configurable and is not fixed to 16-bit / 44.1 kHz.
+
+Use the `pipe` section settings in `shairport-sync.conf` to pin output capabilities for downstream consumers (for example, Snapserver):
+
+* `output_rate`
+* `output_format`
+* `output_channels`
+
+Defaults are build-mode dependent:
+
+* AirPlay 2 builds default to `S32_LE` at `48000` Hz, 2 channels.
+* Classic (non-AirPlay-2) builds default to `S16_LE` at `44100` Hz, 2 channels.
+
+For detailed guidance (including downstream consumer alignment such as Snapserver), see:
+[documents/Pipe-Audio-Backend-Flow.md](documents/Pipe-Audio-Backend-Flow.md).
+
+> **Warning (Snapserver 24/48):** `pipe.output_format` values `S24_3LE` and `S24_LE` may produce
+> audible distortion with Snapserver when configured as `sampleformat=48000:24:2`. For stable
+> operation, prefer `S32_LE` on Shairport Sync and `sampleformat=48000:32:2` on Snapserver.

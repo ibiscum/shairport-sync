@@ -3,6 +3,7 @@
 #include "pc_queue.h"
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -13,8 +14,30 @@ pc_queue metadata_queue;
 #define metadata_queue_size 500
 metadata_package metadata_queue_items[metadata_queue_size];
 pthread_t metadata_thread;
+static int metadata_pipe_queue_initialised;
+static atomic_int metadata_pipe_worker_available;
 
 static void metadata_close(void);
+
+static int metadata_open_fifo(const char *path) {
+  int pipe_fd = try_to_open_pipe_for_writing(path);
+  if (pipe_fd < 0)
+    return -1;
+
+  struct stat st;
+  if (fstat(pipe_fd, &st) != 0) {
+    int saved_errno = errno;
+    close(pipe_fd);
+    errno = saved_errno;
+    return -1;
+  }
+  if (!S_ISFIFO(st.st_mode)) {
+    close(pipe_fd);
+    errno = EINVAL;
+    return -1;
+  }
+  return pipe_fd;
+}
 
 static int metadata_write_all(const char *buffer, size_t count) {
   if ((fd < 0) || (buffer == NULL))
@@ -54,7 +77,9 @@ void metadata_open(void) {
   }
   snprintf(path, pl + 1, "%s", config.metadata_pipename);
 
-  fd = try_to_open_pipe_for_writing(path);
+  fd = metadata_open_fifo(path);
+  if (fd < 0 && errno != ENXIO)
+    debug(1, "Could not open metadata FIFO \"%s\": %s.", path, strerror(errno));
   free(path);
 }
 
@@ -89,10 +114,7 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
       // debug(1,"metadata_process error %d exit 2",ret);
       return;
     }
-    // here, we write the data in base64 form using our nice base64 encoder
-    // but, we break it into lines of 76 output characters, except for the last
-    // one.
-    // thus, we send groups of (76/4)*3 =  57 bytes to the encoder at a time
+    // Encode in 57-byte chunks (up to 76 output characters), without line breaks.
     size_t remaining_count = length;
     char *remaining_data = data;
     // size_t towrite_count;
@@ -103,8 +125,11 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
         towrite_count = 57;
       size_t outbuf_size = 76; // size of output buffer on entry, length of result on exit
       if (base64_encode_so((unsigned char *)remaining_data, towrite_count, outbuf, &outbuf_size) ==
-          NULL)
+          NULL) {
         debug(1, "Error encoding base64 data.");
+        metadata_close();
+        return;
+      }
       // debug(1,"Remaining count: %d ret: %d, outbuf_size:
       // %d.",remaining_count,ret,outbuf_size);
       ret = metadata_write_all(outbuf, outbuf_size);
@@ -132,6 +157,7 @@ void metadata_process(uint32_t type, uint32_t code, char *data, uint32_t length)
 
 void metadata_thread_cleanup_function(__attribute__((unused)) void *arg) {
   // debug(2, "metadata_thread_cleanup_function called");
+  atomic_store(&metadata_pipe_worker_available, 0);
   metadata_close();
 }
 
@@ -141,7 +167,8 @@ void *metadata_thread_function(__attribute__((unused)) void *ignore) {
   metadata_package pack;
   pthread_cleanup_push(metadata_thread_cleanup_function, NULL);
   while (1) {
-    pc_queue_get_item(&metadata_queue, &pack);
+    if (pc_queue_get_item(&metadata_queue, &pack) != 0)
+      break;
     pthread_cleanup_push(metadata_pack_cleanup_function, (void *)&pack);
     if (config.metadata_enabled) {
       if (pack.carrier) {
@@ -155,11 +182,13 @@ void *metadata_thread_function(__attribute__((unused)) void *ignore) {
     }
     pthread_cleanup_pop(1);
   }
-  pthread_cleanup_pop(1); // will never happen
+  pthread_cleanup_pop(1);
   pthread_exit(NULL);
 }
 
-void metadata_pipe_queue_init() {
+void metadata_pipe_queue_init(void) {
+  if (metadata_pipe_queue_initialised)
+    return;
   if ((config.metadata_pipename == NULL) || (config.metadata_pipename[0] == '\0')) {
     warn("metadata pipe name is not set; metadata pipe queue will not start.");
     return;
@@ -172,24 +201,31 @@ void metadata_pipe_queue_init() {
     die("Can not allocate memory for metadata pipe path.");
   snprintf(path, pl + 1, "%s", config.metadata_pipename);
   mode_t oldumask = umask(000);
-  if (mkfifo(path, 0666) && errno != EEXIST)
-    die("Could not create metadata pipe \"%s\".", path);
+  int fifo_rc = mkfifo(path, 0666);
+  int fifo_errno = errno;
   umask(oldumask);
+  if (fifo_rc != 0 && fifo_errno != EEXIST)
+    die("Could not create metadata pipe \"%s\": %s.", path, strerror(fifo_errno));
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    warn("Cannot inspect metadata FIFO \"%s\": %s.", path, strerror(errno));
+    free(path);
+    return;
+  }
+  if (!S_ISFIFO(st.st_mode)) {
+    warn("Metadata pipe path \"%s\" is not a FIFO.", path);
+    free(path);
+    return;
+  }
   debug(1, "metadata pipe name is \"%s\".", path);
 
   // try to open it
-  fd = try_to_open_pipe_for_writing(path);
+  fd = metadata_open_fifo(path);
   // we check that it's not a "real" error. From the "man 2 open" page:
   // "ENXIO  O_NONBLOCK | O_WRONLY is set, the named file is a FIFO, and no process has the FIFO
   // open for reading." Which is okay.
-  if ((fd == -1) && (errno != ENXIO)) {
-    char errorstring[1024];
-    strerror_r(errno, (char *)errorstring, sizeof(errorstring));
-    debug(1, "metadata_init -- error %d (\"%s\") opening pipe: \"%s\".", errno, (char *)errorstring,
-          path);
-    warn("can not open metadata pipe -- error %d (\"%s\") opening pipe: \"%s\".", errno,
-         (char *)errorstring, path);
-  }
+  if ((fd == -1) && (errno != ENXIO))
+    warn("Cannot open metadata FIFO \"%s\": %s.", path, strerror(errno));
   free(path);
 
   // initialise the metadata queues first, otherwise the might be a race condition
@@ -197,26 +233,37 @@ void metadata_pipe_queue_init() {
   pc_queue_init(&metadata_queue, (char *)&metadata_queue_items, sizeof(metadata_package),
                 metadata_queue_size, "pipe");
 
+  atomic_store(&metadata_pipe_worker_available, 1);
   if (named_pthread_create(&metadata_thread, NULL, metadata_thread_function, NULL,
                            "metadata pipe") != 0) {
     debug(1, "Failed to create metadata thread!");
-    pc_queue_delete(&metadata_queue);
+    atomic_store(&metadata_pipe_worker_available, 0);
+    metadata_thread = 0;
+    metadata_queue_delete(&metadata_queue);
     metadata_close();
+    return;
   }
+  metadata_pipe_queue_initialised = 1;
 }
 
-void metadata_pipe_queue_stop() {
+void metadata_pipe_queue_stop(void) {
   if (metadata_thread) {
+    atomic_store(&metadata_pipe_worker_available, 0);
     // debug(2, "metadata stop metadata_thread thread.");
     pthread_cancel(metadata_thread);
     pthread_join(metadata_thread, NULL);
-    pc_queue_delete(&metadata_queue);
+    metadata_queue_delete(&metadata_queue);
     metadata_thread = 0;
+    metadata_pipe_queue_initialised = 0;
     // debug(2, "metadata_stop finished successfully.");
   }
 }
 
 int send_metadata_to_pipe_queue(const uint32_t type, const uint32_t code, const char *data,
                                 const uint32_t length, rtsp_message *carrier, int block) {
+  if (!metadata_pipe_queue_initialised || !atomic_load(&metadata_pipe_worker_available)) {
+    debug(1, "Metadata pipe queue is unavailable.");
+    return ENODEV;
+  }
   return send_metadata_to_queue(&metadata_queue, type, code, data, length, carrier, block);
 }

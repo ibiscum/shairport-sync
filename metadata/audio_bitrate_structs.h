@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 /* Match the player's bounded packet window. No allocation on packet arrival. */
 #define AUDIO_BITRATE_HISTORY_SIZE 1024

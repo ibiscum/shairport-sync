@@ -11,6 +11,9 @@
 
 extern mdns_backend mdns_avahi;
 extern mdns_backend mdns_dns_sd;
+#ifdef CONFIG_METADATA
+extern mdns_backend mdns_metadata;
+#endif
 
 extern int mdns_test_die_called;
 extern jmp_buf mdns_test_die_jmp;
@@ -99,7 +102,11 @@ static void test_default_backend_falls_back_after_failure(void **state) {
 
   mdns_register(NULL, NULL);
 
+#ifdef CONFIG_DNS_SD
   assert_ptr_equal(config.mdns, &mdns_dns_sd);
+#else
+  assert_ptr_equal(config.mdns, &mdns_metadata);
+#endif
   assert_int_equal(avahi_register_call_count, 1);
   assert_int_equal(dns_register_call_count, 1);
   assert_int_equal(dns_monitor_start_call_count, 1);
