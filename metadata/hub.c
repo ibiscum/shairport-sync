@@ -126,6 +126,20 @@ int update_uint64_record(uint64_record_t *record, const uint64_t value) {
   return changed;
 }
 
+static char *metadata_dup_payload_or_log(const char *context, const char *data, uint32_t length) {
+  if ((data == NULL) || (length == 0))
+    return NULL;
+
+  char *dup = malloc((size_t)length + 1);
+  if (dup == NULL) {
+    debug(1, "MH %s payload allocation failed for length %u.", context, length);
+    return NULL;
+  }
+  memcpy(dup, data, length);
+  dup[length] = '\0';
+  return dup;
+}
+
 void metadata_hub_init(void) {
   // debug(1, "Metadata bundle initialisation.");
   memset(&metadata_store, 0, sizeof(metadata_store));
@@ -294,18 +308,18 @@ char *metadata_write_image_file(const char *buf, int len) {
       ext = jpg;
     }
     mode_t oldumask = umask(000);
-    int result = mkpath(cover_art_cache_dir, 0777);
+    int result = mkpath(config.cover_art_cache_dir, 0777);
     umask(oldumask);
     if ((result == 0) || (result == -EEXIST)) {
       // see if the file exists by opening it.
       // if it exists, we're done
       char *prefix = "cover-";
 
-      size_t pl = strlen(cover_art_cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) + 1 +
+        size_t pl = strlen(config.cover_art_cache_dir) + 1 + strlen(prefix) + strlen(img_md5_str) + 1 +
           strlen(ext);
 
       path = malloc(pl + 1);
-      snprintf(path, pl + 1, "%s/%s%s.%s", cover_art_cache_dir, prefix, img_md5_str, ext);
+        snprintf(path, pl + 1, "%s/%s%s.%s", config.cover_art_cache_dir, prefix, img_md5_str, ext);
       int cover_fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRGRP | S_IROTH);
       if (cover_fd >= 0) {
         // write the contents
@@ -317,10 +331,10 @@ char *metadata_write_image_file(const char *buf, int len) {
         close(cover_fd);
 
         // now delete all other files, if requested
-        if (metadata_hub_retain_coverart() == 0) {
+        if (config.retain_coverart == 0) {
           DIR *d;
           struct dirent *dir;
-          d = opendir(cover_art_cache_dir);
+          d = opendir(config.cover_art_cache_dir);
           if (d) {
             int fnl = strlen(prefix) + strlen(img_md5_str) + 1 + strlen(ext) + 1;
 
@@ -329,7 +343,7 @@ char *metadata_write_image_file(const char *buf, int len) {
               die("Can't allocate memory at metadata_write_image_file.");
             memset(full_filename, 0, fnl);
             snprintf(full_filename, fnl, "%s%s.%s", prefix, img_md5_str, ext);
-            int dir_fd = open(cover_art_cache_dir, O_DIRECTORY);
+            int dir_fd = open(config.cover_art_cache_dir, O_DIRECTORY);
             if (dir_fd >= 0) {
               while ((dir = readdir(d)) != NULL) {
                 if (dir->d_type == DT_REG) {
@@ -341,10 +355,11 @@ char *metadata_write_image_file(const char *buf, int len) {
                 }
               }
               if (close(dir_fd) < 0)
-                debug(1, "Error %d closing directory \"%s\"", errno, cover_art_cache_dir);
+                debug(1, "Error %d closing directory \"%s\"", errno,
+                      config.cover_art_cache_dir);
             } else {
               debug(1, "Can't open the directory \"%s\" for deletion -- error %d.",
-                    cover_art_cache_dir, errno);
+                    config.cover_art_cache_dir, errno);
             }
             free(full_filename);
             closedir(d);
@@ -362,7 +377,7 @@ char *metadata_write_image_file(const char *buf, int len) {
       }
     } else {
       debug(1, "Couldn't access or create the cover art cache directory \"%s\".",
-            cover_art_cache_dir);
+        config.cover_art_cache_dir);
     }
   }
   pthread_setcancelstate(oldState, NULL);
@@ -423,13 +438,6 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         // even if audio is coming through from the player
         // it is used to validate progress string information
       }
-    } break;
-    case 'asdk': {
-      // get the one-byte number as an unsigned number
-      debug(3, "MH Song Data Kind seen: \"%d\" of length %u.", (unsigned)data[0], length);
-      metadata_packet_item_changed |=
-          update_uint64_record(&metadata_store.npi.song_data_kind, (unsigned)data[0]);
-      update_uint64_record(&new_npi.song_data_kind, (unsigned)data[0]);
     } break;
     case 'asdk': {
       if (length < 1) {

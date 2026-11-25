@@ -133,8 +133,8 @@ int _safe_socket_close(const char *filename, const int linenumber, int *sockfd) 
 }
 
 uint32_t player_put_packet(uint32_t ssrc, seq_t seqno, uint32_t actual_timestamp,
-                           uint8_t *data, size_t len, int mute,
-                           int32_t timestamp_gap, rtsp_conn_info *conn) {
+                           uint8_t *data, size_t len, int mute, int32_t timestamp_gap,
+                           rtsp_conn_info *conn, uint32_t packet_sequence) {
   (void)ssrc;
   (void)seqno;
   (void)actual_timestamp;
@@ -143,6 +143,7 @@ uint32_t player_put_packet(uint32_t ssrc, seq_t seqno, uint32_t actual_timestamp
   (void)mute;
   (void)timestamp_gap;
   (void)conn;
+  (void)packet_sequence;
   player_put_packet_call_count++;
   player_put_packet_last_seq = seqno;
   player_put_packet_last_timestamp = actual_timestamp;
@@ -151,13 +152,16 @@ uint32_t player_put_packet(uint32_t ssrc, seq_t seqno, uint32_t actual_timestamp
 }
 
 int ptp_get_clock_info(uint64_t *actual_clock_id, uint64_t *time_of_sample,
-                       uint64_t *raw_offset, uint64_t *mastership_start_time) {
+                       uint64_t *raw_offset, int64_t *clock_change_offset,
+                       uint64_t *mastership_start_time) {
   if (actual_clock_id)
     *actual_clock_id = mock_ptp_clock_id;
   if (time_of_sample)
     *time_of_sample = mock_ptp_time_of_sample;
   if (raw_offset)
     *raw_offset = mock_ptp_raw_offset;
+  if (clock_change_offset)
+    *clock_change_offset = 0;
   if (mastership_start_time)
     *mastership_start_time = mock_ptp_mastership_start_time;
   return mock_ptp_response;
@@ -207,6 +211,15 @@ void _debug(const char *filename, const int linenumber, int level,
   (void)linenumber;
   (void)level;
   (void)format;
+}
+
+void _debug_print_buffer(const char *thefilename, const int linenumber, int level, void *buf,
+                         size_t buf_len) {
+  (void)thefilename;
+  (void)linenumber;
+  (void)level;
+  (void)buf;
+  (void)buf_len;
 }
 
 void _inform(const char *filename, const int linenumber, const char *format,

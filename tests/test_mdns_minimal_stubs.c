@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "common.h"
-#include "mdns.h"
+#include "mdns/mdns.h"
 
 shairport_cfg config;
 
@@ -113,6 +113,14 @@ mdns_backend mdns_dns_sd = {.name = "dns-sd",
                             .mdns_dacp_monitor_start = dns_monitor_start,
                             .mdns_dacp_monitor_set_id = dns_monitor_set_id,
                             .mdns_dacp_monitor_stop = dns_monitor_stop};
+
+mdns_backend mdns_metadata = {.name = "metadata",
+                              .mdns_register = dns_register,
+                              .mdns_update = NULL,
+                              .mdns_unregister = dns_unregister,
+                              .mdns_dacp_monitor_start = dns_monitor_start,
+                              .mdns_dacp_monitor_set_id = dns_monitor_set_id,
+                              .mdns_dacp_monitor_stop = dns_monitor_stop};
 
 void _debug(const char *filename, const int linenumber, int level, const char *format, ...) {
   (void)filename;

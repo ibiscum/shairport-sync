@@ -45,6 +45,8 @@ static int mqtt_lib_initialised = 0;
 static int metadata_mqtt_queue_initialised = 0;
 static pthread_mutex_t mqtt_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void metadata_mqtt_close(void);
+
 static void mqtt_set_connected(int state) {
   pthread_mutex_lock(&mqtt_state_mutex);
   connected = state;

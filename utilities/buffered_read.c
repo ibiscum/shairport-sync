@@ -29,7 +29,9 @@
 
 #include "buffered_read.h"
 #include "common.h"
+#include <errno.h>
 #include <pthread.h>
+#include <string.h>
 #include <sys/types.h>
 
 ssize_t buffered_read(buffered_tcp_desc *descriptor, void *buf, size_t count,

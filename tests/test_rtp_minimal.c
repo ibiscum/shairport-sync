@@ -257,10 +257,8 @@ static void test_set_and_reset_ptp_anchor_info(void **state) {
   assert_int_equal(conn.anchor_rtptime, 1000U);
   assert_int_equal(conn.anchor_time, 2000ULL);
 
-  conn.last_anchor_info_is_valid = 1;
   reset_ptp_anchor_info(&conn);
   assert_int_equal(conn.anchor_remote_info_is_valid, 0);
-  assert_int_equal(conn.last_anchor_info_is_valid, 0);
 }
 
 static void test_get_ptp_anchor_local_time_info_clock_ok(void **state) {
@@ -272,8 +270,11 @@ static void test_get_ptp_anchor_local_time_info_clock_ok(void **state) {
   conn.anchor_remote_info_is_valid = 1;
   conn.anchor_clock = 0xABCDULL;
   conn.anchor_rtptime = 44100U;
+  conn.anchor_rtptime_extended = 44100U;
   conn.anchor_time = 5000000000ULL;
   conn.input_rate = 44100;
+  conn.rtp_timestamp_extension_reference_is_valid = 1;
+  conn.rtp_timestamp_extension_reference = conn.anchor_rtptime;
 
   set_mock_absolute_time_ns(now);
   set_mock_ptp_response(clock_ok, conn.anchor_clock, now - 100000000ULL, 2000ULL,
@@ -284,7 +285,7 @@ static void test_get_ptp_anchor_local_time_info_clock_ok(void **state) {
   int response = get_ptp_anchor_local_time_info(&conn, &anchor_rtp, &anchor_local);
 
   assert_int_equal(response, clock_ok);
-  assert_int_equal(conn.last_anchor_info_is_valid, 1);
+  assert_true(conn.last_anchor_validity_start_time != 0);
   assert_int_equal(anchor_rtp, conn.anchor_rtptime);
   assert_int_equal(anchor_local, conn.anchor_time - 2000ULL);
 }

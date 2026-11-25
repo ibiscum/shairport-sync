@@ -69,6 +69,15 @@ static mdns_backend *mdns_backends[] = {
 #endif
     NULL};
 
+static int mdns_backend_is_known(mdns_backend *candidate) {
+  mdns_backend **b = NULL;
+  for (b = mdns_backends; *b; b++) {
+    if (*b == candidate)
+      return 1;
+  }
+  return 0;
+}
+
 void mdns_register(char **txt_records, char **secondary_txt_records) {
   if (config.mdns != NULL)
     mdns_unregister();
@@ -146,11 +155,13 @@ void mdns_update(char **txt_records, char **secondary_txt_records) {
 }
 
 void mdns_unregister(void) {
-  mdns_dacp_monitor_stop();
-  if (config.mdns) {
+  if (config.mdns && mdns_backend_is_known(config.mdns)) {
+    mdns_dacp_monitor_stop();
     config.mdns->mdns_unregister();
-    config.mdns = NULL;
+  } else if (config.mdns) {
+    warn("Ignoring stale mDNS backend pointer while unregistering.");
   }
+  config.mdns = NULL;
 }
 
 void mdns_dacp_monitor_start(void) {

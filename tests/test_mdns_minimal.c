@@ -7,7 +7,7 @@
 #include <cmocka.h>
 
 #include "common.h"
-#include "mdns.h"
+#include "mdns/mdns.h"
 
 extern mdns_backend mdns_avahi;
 extern mdns_backend mdns_dns_sd;
