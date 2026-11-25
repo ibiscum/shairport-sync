@@ -520,11 +520,11 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
   int changed = 0;
   metadata_hub_modify_prolog();
   pthread_cleanup_push(metadata_hub_unlock_hub_mutex_cleanup, NULL);
-  if (type == 'core')
+  if (type == METADATA_FOURCC('c', 'o', 'r', 'e'))
   {
     switch (code)
     {
-    case 'caps':
+    case METADATA_FOURCC('c', 'a', 'p', 's'):
     {
       if ((length < 1) || (data == NULL))
       {
@@ -544,7 +544,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
     }
     break;
-    case 'asdk':
+    case METADATA_FOURCC('a', 's', 'd', 'k'):
     {
       if (length < 1)
       {
@@ -558,7 +558,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       update_uint64_record(&new_npi.song_data_kind, (unsigned)data[0]);
     }
     break;
-    case 'mper':
+    case METADATA_FOURCC('m', 'p', 'e', 'r'):
     {
       if (length < 8)
       {
@@ -576,7 +576,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       update_uint64_record(&new_npi.item_id, vl);
     }
     break;
-    case 'astm':
+    case METADATA_FOURCC('a', 's', 't', 'm'):
     {
       if ((length < 4) || (data == NULL))
       {
@@ -590,25 +590,25 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       update_uint64_record(&new_npi.songtime_in_microseconds, ui * 1000);
     }
     break;
-    case 'asal':
+    case METADATA_FOURCC('a', 's', 'a', 'l'):
       metadata_packet_item_changed |=
           update_string_record_with_data(&metadata_store.npi.album_name, data, length);
       update_string_record_with_data(&new_npi.album_name, data, length);
       debug(3, "MH Album name set to: \"%s\"", metadata_store.npi.album_name);
       break;
-    case 'asar':
+    case METADATA_FOURCC('a', 's', 'a', 'r'):
       metadata_packet_item_changed |=
           update_string_record_with_data(&metadata_store.npi.artist_name, data, length);
       update_string_record_with_data(&new_npi.artist_name, data, length);
       debug(3, "MH Artist name set to: \"%s\"", metadata_store.npi.artist_name);
       break;
-    case 'assl':
+    case METADATA_FOURCC('a', 's', 's', 'l'):
       metadata_packet_item_changed |=
           update_string_record_with_data(&metadata_store.npi.album_artist_name, data, length);
       update_string_record_with_data(&new_npi.album_artist_name, data, length);
       debug(3, "MH Album Artist name set to: \"%s\"", metadata_store.npi.album_artist_name);
       break;
-    case 'ascm':
+    case METADATA_FOURCC('a', 's', 'c', 'm'):
       if (update_string_record_with_data(&metadata_store.npi.comment, data, length))
       {
         debug(3, "MH Comment set to: \"%s\"", metadata_store.npi.comment);
@@ -616,7 +616,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.comment, data, length);
       break;
-    case 'asgn':
+    case METADATA_FOURCC('a', 's', 'g', 'n'):
       if (update_string_record_with_data(&metadata_store.npi.genre, data, length))
       {
         debug(3, "MH Genre set to: \"%s\"", metadata_store.npi.genre);
@@ -624,7 +624,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.genre, data, length);
       break;
-    case 'minm':
+    case METADATA_FOURCC('m', 'i', 'n', 'm'):
       if (update_string_record_with_data(&metadata_store.npi.track_name, data, length))
       {
         debug(3, "MH Track Name set to: \"%s\"", metadata_store.npi.track_name);
@@ -632,7 +632,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.track_name, data, length);
       break;
-    case 'astn':
+    case METADATA_FOURCC('a', 's', 't', 'n'):
     {
       if ((length < 2) || (data == NULL))
       {
@@ -645,7 +645,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       update_uint64_record(&new_npi.track_number, ui);
     }
     break;
-    case 'ascp':
+    case METADATA_FOURCC('a', 's', 'c', 'p'):
       if (update_string_record_with_data(&metadata_store.npi.composer, data, length))
       {
         debug(3, "MH Composer set to: \"%s\"", metadata_store.npi.composer);
@@ -653,7 +653,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.composer, data, length);
       break;
-    case 'asdt':
+    case METADATA_FOURCC('a', 's', 'd', 't'):
       if (update_string_record_with_data(&metadata_store.npi.song_description, data, length))
       {
         debug(3, "MH Song Description set to: \"%s\"", metadata_store.npi.song_description);
@@ -661,7 +661,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.song_description, data, length);
       break;
-    case 'asaa':
+    case METADATA_FOURCC('a', 's', 'a', 'a'):
       if (update_string_record_with_data(&metadata_store.npi.song_album_artist, data, length))
       {
         debug(3, "MH Song Album Artist set to: \"%s\"", metadata_store.npi.song_album_artist);
@@ -669,7 +669,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.song_album_artist, data, length);
       break;
-    case 'assn':
+    case METADATA_FOURCC('a', 's', 's', 'n'):
       if (update_string_record_with_data(&metadata_store.npi.sort_name, data, length))
       {
         debug(3, "MH Sort Name set to: \"%s\"", metadata_store.npi.sort_name);
@@ -677,7 +677,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.sort_name, data, length);
       break;
-    case 'assa':
+    case METADATA_FOURCC('a', 's', 's', 'a'):
       if (update_string_record_with_data(&metadata_store.npi.sort_artist, data, length))
       {
         debug(3, "MH Sort Artist set to: \"%s\"", metadata_store.npi.sort_artist);
@@ -685,7 +685,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.sort_artist, data, length);
       break;
-    case 'assu':
+    case METADATA_FOURCC('a', 's', 's', 'u'):
       if (update_string_record_with_data(&metadata_store.npi.sort_album, data, length))
       {
         debug(3, "MH Sort Album set to: \"%s\"", metadata_store.npi.sort_album);
@@ -693,7 +693,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       }
       update_string_record_with_data(&new_npi.sort_album, data, length);
       break;
-    case 'assc':
+    case METADATA_FOURCC('a', 's', 's', 'c'):
       if (update_string_record_with_data(&metadata_store.npi.sort_composer, data, length))
       {
         debug(3, "MH Sort Composer set to: \"%s\"", metadata_store.npi.sort_composer);
@@ -724,11 +724,11 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       break;
     }
   }
-  else if (type == 'ssnc')
+  else if (type == METADATA_FOURCC('s', 's', 'n', 'c'))
   {
     switch (code)
     {
-    case 'conn': // a new connection -- some things might need to be reset
+    case METADATA_FOURCC('c', 'o', 'n', 'n'): // a new connection -- some things might need to be reset
       metadata_hub_reset_npi(&metadata_store.npi);
       invalidate_string_record(&metadata_store.progress_string);
       metadata_store.progress_first_timestamp = 0;
@@ -739,17 +739,17 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
 #endif
       break;
     // ignore the following
-    case 'pcst':
-    case 'pcen':
+    case METADATA_FOURCC('p', 'c', 's', 't'):
+    case METADATA_FOURCC('p', 'c', 'e', 'n'):
       break;
-    case 'dapo':
+    case METADATA_FOURCC('d', 'a', 'p', 'o'):
     {
       char *dacp_port_string = strndup(data, length);
       debug(3, "DACP port is \"%s\"", dacp_port_string);
       free(dacp_port_string);
     }
     break;
-    case 'mdst':
+    case METADATA_FOURCC('m', 'd', 's', 't'):
       // start of a metadata bundle...
       debug(4, "MH Metadata stream processing start.");
       // There is a difficulty with this NPI metadata as it comes in.
@@ -771,7 +771,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       // the item id wold be updated if it changes, so we need to keep the current one
       temporary_item_id = metadata_store.npi.item_id;
       break;
-    case 'mden':
+    case METADATA_FOURCC('m', 'd', 'e', 'n'):
       // here, we decide whether to take the updated npi data or to take the
       // completely new one.
 
@@ -793,20 +793,20 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         debug(3, "MH Metadata stream processing end without changes.");
       changed = metadata_packet_item_changed;
       break;
-    case 'PICT':
+    case METADATA_FOURCC('P', 'I', 'C', 'T'):
       changed = metadata_hub_process_picture(data, length);
       break;
-    case 'clip':
+    case METADATA_FOURCC('c', 'l', 'i', 'p'):
       changed = update_string_record_with_data(&metadata_store.client_ip, data, length);
       if (changed)
         debug(3, "MH Client IP set to: \"%s\"", metadata_store.client_ip);
       break;
-    case 'snam':
+    case METADATA_FOURCC('s', 'n', 'a', 'm'):
       changed = update_string_record_with_data(&metadata_store.client_name, data, length);
       if (changed)
         debug(3, "MH Client Name set to: \"%s\"", metadata_store.client_name);
       break;
-    case 'prgr':
+    case METADATA_FOURCC('p', 'r', 'g', 'r'):
       changed = update_string_record_with_data(&metadata_store.progress_string, data, length);
       if (changed)
       {
@@ -826,12 +826,12 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
         }
       }
       break;
-    case 'phbt':
+    case METADATA_FOURCC('p', 'h', 'b', 't'):
       changed = update_string_record_with_data(&metadata_store.frame_position_string, data, length);
       if (changed)
         debug(3, "MH Frame Position String set to: \"%s\"", metadata_store.frame_position_string);
       break;
-    case 'phb0':
+    case METADATA_FOURCC('p', 'h', 'b', '0'):
       if (update_string_record_with_data(&metadata_store.first_frame_position_string, data,
                                          length))
       {
@@ -840,50 +840,50 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
               metadata_store.first_frame_position_string);
       }
       break;
-    case 'styp':
+    case METADATA_FOURCC('s', 't', 'y', 'p'):
       if (update_string_record_with_data(&metadata_store.stream_type, data, length))
       {
         changed = 1;
         debug(3, "MH Stream Type set to: \"%s\"", metadata_store.stream_type);
       }
       break;
-    case 'sdsc':
+    case METADATA_FOURCC('s', 'd', 's', 'c'):
       if (update_string_record_with_data(&metadata_store.source_format, data, length))
       {
         changed = 1;
         debug(3, "MH Source Format set to: \"%s\"", metadata_store.source_format);
       }
       break;
-    case 'odsc':
+    case METADATA_FOURCC('o', 'd', 's', 'c'):
       if (update_string_record_with_data(&metadata_store.output_format, data, length))
       {
         changed = 1;
         debug(3, "MH Output Format set to: \"%s\"", metadata_store.output_format);
       }
       break;
-    case 'svip':
+    case METADATA_FOURCC('s', 'v', 'i', 'p'):
       if (update_string_record_with_data(&metadata_store.server_ip, data, length))
       {
         changed = 1;
         debug(3, "MH Server IP set to: \"%s\"", metadata_store.server_ip);
       }
       break;
-    case 'abeg':
+    case METADATA_FOURCC('a', 'b', 'e', 'g'):
       changed = (metadata_store.active_state != AM_ACTIVE);
       metadata_store.active_state = AM_ACTIVE;
       break;
-    case 'aend':
+    case METADATA_FOURCC('a', 'e', 'n', 'd'):
       changed = (metadata_store.active_state != AM_INACTIVE);
       metadata_store.active_state = AM_INACTIVE;
       break;
-    case 'pres':
-    case 'pbeg':
+    case METADATA_FOURCC('p', 'r', 'e', 's'):
+    case METADATA_FOURCC('p', 'b', 'e', 'g'):
       changed = ((metadata_store.player_state != PS_PLAYING) ||
                  (metadata_store.player_thread_active == 0));
       metadata_store.player_state = PS_PLAYING;
       metadata_store.player_thread_active = 1;
       break;
-    case 'pend':
+    case METADATA_FOURCC('p', 'e', 'n', 'd'):
       /*
       #ifdef CONFIG_AIRPLAY_2
             // calculate added play time when play ends (typically AirPlay 2 Buffered Stream)
@@ -904,7 +904,7 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       metadata_store.player_state = PS_STOPPED;
       metadata_store.player_thread_active = 0;
       break;
-    case 'paus':
+    case METADATA_FOURCC('p', 'a', 'u', 's'):
       /*
       #ifdef CONFIG_AIRPLAY_2
             // calculate added play time when play pauses (typically AirPlay 2 Buffered Stream)
@@ -925,13 +925,13 @@ void metadata_hub_process_metadata(uint32_t type, uint32_t code, char *data, uin
       break;
       /*
       // not using this anymore.
-          case 'pffr': // this is sent when the first frame has been received
-          case 'prsm':
+          case METADATA_FOURCC('p', 'f', 'f', 'r'): // this is sent when the first frame has been received
+          case METADATA_FOURCC('p', 'r', 's', 'm'):
             changed = (metadata_store.player_state != PS_PLAYING);
             metadata_store.player_state = PS_PLAYING;
             break;
       */
-    case 'pvol':
+    case METADATA_FOURCC('p', 'v', 'o', 'l'):
     {
       // Note: it's assumed that the config.airplay volume has already been correctly set.
       // int32_t actual_volume;

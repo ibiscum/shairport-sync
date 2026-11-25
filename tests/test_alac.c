@@ -164,12 +164,115 @@ static void test_alac_decode_frame_stereo_uncompressed_16bit(void **state) {
   alac_free(alac);
 }
 
+static void test_alac_decode_frame_mono_uncompressed_16bit_without_hassize(void **state) {
+  (void)state;
+  alac_file *alac = alac_create(16, 1);
+  assert_non_null(alac);
+
+  alac->setinfo_max_samples_per_frame = 1;
+  alac->setinfo_sample_size = 16;
+  alac_allocate_buffers(alac);
+
+  bit_writer w = {0};
+  bit_writer_put(&w, 0, 3);
+  bit_writer_put(&w, 0, 4);
+  bit_writer_put(&w, 0, 12);
+  bit_writer_put(&w, 0, 1); /* hassize = 0 */
+  bit_writer_put(&w, 0, 2);
+  bit_writer_put(&w, 1, 1); /* uncompressed */
+  bit_writer_put(&w, 0x1234, 16);
+
+  int16_t out = 0;
+  int output_size = (int)sizeof(out);
+  alac_decode_frame(alac, w.data, &out, &output_size);
+
+  assert_int_equal(output_size, (int)sizeof(int16_t));
+  assert_int_equal(out, 0x1234);
+
+  alac_free(alac);
+}
+
+static void test_alac_decode_frame_invalid_channel_returns_zero(void **state) {
+  (void)state;
+  alac_file *alac = alac_create(16, 1);
+  assert_non_null(alac);
+
+  alac->setinfo_max_samples_per_frame = 1;
+  alac->setinfo_sample_size = 16;
+  alac_allocate_buffers(alac);
+
+  bit_writer w = {0};
+  bit_writer_put(&w, 7, 3); /* unsupported channel code */
+
+  int16_t out = 0;
+  int output_size = (int)sizeof(out);
+  alac_decode_frame(alac, w.data, &out, &output_size);
+
+  assert_int_equal(output_size, 0);
+
+  alac_free(alac);
+}
+
+static void test_alac_decode_frame_output_buffer_too_small_returns_zero(void **state) {
+  (void)state;
+  alac_file *alac = alac_create(16, 1);
+  assert_non_null(alac);
+
+  alac->setinfo_max_samples_per_frame = 2;
+  alac->setinfo_sample_size = 16;
+  alac_allocate_buffers(alac);
+
+  bit_writer w = {0};
+  bit_writer_put(&w, 0, 3);
+
+  int16_t out = 0;
+  int output_size = (int)sizeof(out);
+  alac_decode_frame(alac, w.data, &out, &output_size);
+
+  assert_int_equal(output_size, 0);
+
+  alac_free(alac);
+}
+
+static void test_alac_decode_frame_mono_uncompressed_unimplemented_sample_size_returns_zero(
+    void **state) {
+  (void)state;
+  alac_file *alac = alac_create(20, 1);
+  assert_non_null(alac);
+
+  alac->setinfo_max_samples_per_frame = 1;
+  alac->setinfo_sample_size = 20;
+  alac_allocate_buffers(alac);
+
+  bit_writer w = {0};
+  bit_writer_put(&w, 0, 3);
+  bit_writer_put(&w, 0, 4);
+  bit_writer_put(&w, 0, 12);
+  bit_writer_put(&w, 1, 1);
+  bit_writer_put(&w, 0, 2);
+  bit_writer_put(&w, 1, 1); /* uncompressed */
+  bit_writer_put(&w, 1, 32);
+  bit_writer_put(&w, 0xABCDE, 20);
+
+  uint8_t out[4] = {0};
+  int output_size = (int)sizeof(out);
+  alac_decode_frame(alac, w.data, out, &output_size);
+
+  assert_int_equal(output_size, 0);
+
+  alac_free(alac);
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
       cmocka_unit_test(test_alac_create_initializes_fields),
       cmocka_unit_test(test_alac_set_info_parses_values_and_allocates_buffers),
       cmocka_unit_test(test_alac_decode_frame_mono_uncompressed_16bit),
       cmocka_unit_test(test_alac_decode_frame_stereo_uncompressed_16bit),
+      cmocka_unit_test(test_alac_decode_frame_mono_uncompressed_16bit_without_hassize),
+      cmocka_unit_test(test_alac_decode_frame_invalid_channel_returns_zero),
+      cmocka_unit_test(test_alac_decode_frame_output_buffer_too_small_returns_zero),
+      cmocka_unit_test(test_alac_decode_frame_mono_uncompressed_unimplemented_sample_size_returns_zero),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);

@@ -1,12 +1,23 @@
-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_builddir)
+AM_CPPFLAGS = -I$(top_srcdir) -I$(top_builddir) @glib_CFLAGS@
 AM_CFLAGS = --include=$(top_builddir)/config.h --include=$(top_srcdir)/utilities/debug.h
 
 check_PROGRAMS = \
 	test_activity_monitor \
 	test_alac \
 	test_alac_compressed \
+	test_alac_header_self_containment \
+	test_alac_header_api_contract \
+	test_ap2_buffered_audio_processor_header_self_containment \
+	test_ap2_buffered_audio_processor_header_self_containment_no_ap2 \
+	test_ap2_buffered_audio_processor_header_api_contract \
+	test_ap2_event_receiver_header_self_containment \
+	test_ap2_event_receiver_header_self_containment_no_ap2 \
+	test_ap2_event_receiver_header_api_contract \
 	test_ap2_packet_validation \
 	test_ap2_buffered_gate_integration \
+	test_audio_regression \
+	test_audio_alsa_regression \
+	test_audio_pipe_regression \
 	test_audio_pw_safety \
 	test_dacp_safety \
 	test_dacp_lifecycle_safety \
@@ -38,7 +49,8 @@ endif
 TESTS = $(check_PROGRAMS)
 
 # Keep warnings consistent with the main build and add cmocka flags/libs.
-test_activity_monitor_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_activity_monitor_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread \
+	-include $(top_srcdir)/tests/harness/undef_dbus_config.h
 
 test_activity_monitor_SOURCES = \
 	test_activity_monitor.c \
@@ -62,6 +74,44 @@ test_alac_compressed_SOURCES = \
 test_alac_compressed_LDFLAGS = -pthread
 test_alac_compressed_LDADD = $(CMOCKA_LIBS)
 
+test_alac_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_alac_header_self_containment_SOURCES = test_alac_header_self_containment.c
+test_alac_header_self_containment_LDFLAGS = -pthread
+
+test_alac_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_alac_header_api_contract_SOURCES = test_alac_header_api_contract.c
+test_alac_header_api_contract_LDFLAGS = -pthread
+
+test_ap2_buffered_audio_processor_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_buffered_audio_processor_header_self_containment_SOURCES = \
+	test_ap2_buffered_audio_processor_header_self_containment.c
+test_ap2_buffered_audio_processor_header_self_containment_LDFLAGS = -pthread
+
+test_ap2_buffered_audio_processor_header_self_containment_no_ap2_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_buffered_audio_processor_header_self_containment_no_ap2_SOURCES = \
+	test_ap2_buffered_audio_processor_header_self_containment_no_ap2.c
+test_ap2_buffered_audio_processor_header_self_containment_no_ap2_LDFLAGS = -pthread
+
+test_ap2_buffered_audio_processor_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_buffered_audio_processor_header_api_contract_SOURCES = \
+	test_ap2_buffered_audio_processor_header_api_contract.c
+test_ap2_buffered_audio_processor_header_api_contract_LDFLAGS = -pthread
+
+test_ap2_event_receiver_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_event_receiver_header_self_containment_SOURCES = \
+	test_ap2_event_receiver_header_self_containment.c
+test_ap2_event_receiver_header_self_containment_LDFLAGS = -pthread
+
+test_ap2_event_receiver_header_self_containment_no_ap2_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_event_receiver_header_self_containment_no_ap2_SOURCES = \
+	test_ap2_event_receiver_header_self_containment_no_ap2.c
+test_ap2_event_receiver_header_self_containment_no_ap2_LDFLAGS = -pthread
+
+test_ap2_event_receiver_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_ap2_event_receiver_header_api_contract_SOURCES = \
+	test_ap2_event_receiver_header_api_contract.c
+test_ap2_event_receiver_header_api_contract_LDFLAGS = -pthread
+
 test_ap2_packet_validation_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_ap2_packet_validation_SOURCES = \
 	test_ap2_packet_validation.c \
@@ -77,6 +127,23 @@ test_ap2_buffered_gate_integration_SOURCES = \
 	$(top_srcdir)/utilities/buffered_read.c
 test_ap2_buffered_gate_integration_LDFLAGS = -pthread
 test_ap2_buffered_gate_integration_LDADD = $(CMOCKA_LIBS)
+
+test_audio_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_audio_regression_SOURCES = test_audio_regression.c
+test_audio_regression_LDFLAGS = -pthread
+test_audio_regression_LDADD = $(CMOCKA_LIBS)
+
+test_audio_alsa_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_audio_alsa_regression_SOURCES = \
+	test_audio_alsa_regression.c \
+	$(top_srcdir)/utilities/audio_alsa_safety.c
+test_audio_alsa_regression_LDFLAGS = -pthread
+test_audio_alsa_regression_LDADD = $(CMOCKA_LIBS)
+
+test_audio_pipe_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_audio_pipe_regression_SOURCES = test_audio_pipe_regression.c
+test_audio_pipe_regression_LDFLAGS = -pthread
+test_audio_pipe_regression_LDADD = $(CMOCKA_LIBS)
 
 test_audio_pw_safety_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_audio_pw_safety_SOURCES = \

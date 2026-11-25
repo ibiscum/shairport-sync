@@ -137,6 +137,7 @@ void activity_monitor_signify_activity(int active) {
 
 void activity_thread_cleanup_handler(__attribute__((unused)) void *arg) {
   debug(3, "activity_monitor: thread exit.");
+  pthread_mutex_unlock(&activity_monitor_mutex);
   pthread_cond_destroy(&activity_monitor_cv);
   pthread_mutex_destroy(&activity_monitor_mutex);
 }
@@ -145,6 +146,7 @@ void *activity_monitor_thread_code(void *arg) {
   pthread_cleanup_push(activity_thread_cleanup_handler, arg);
 
   int rc;
+  int terminate = 0;
   uint64_t sec;
   uint64_t nsec;
   struct timespec time_for_wait;
@@ -157,15 +159,31 @@ void *activity_monitor_thread_code(void *arg) {
     switch (state) {
     case am_inactive:
       debug(2, "am_state: am_inactive");
-      while (player_state != ps_active)
-        pthread_cond_wait(&activity_monitor_cv, &activity_monitor_mutex);
+      while (player_state != ps_active) {
+        rc = pthread_cond_wait(&activity_monitor_cv, &activity_monitor_mutex);
+        if (rc != 0) {
+          debug(1, "activity monitor cond_wait failed in am_inactive state: %d.", rc);
+          terminate = 1;
+          break;
+        }
+      }
+      if (terminate)
+        break;
       // state = am_active; this is done by the activity_monitor_signify_activity(1) function
       debug(2, "am_state: am_active");
       break;
     case am_active:
       // debug(1,"am_state: am_active");
-      while (player_state != ps_inactive)
-        pthread_cond_wait(&activity_monitor_cv, &activity_monitor_mutex);
+      while (player_state != ps_inactive) {
+        rc = pthread_cond_wait(&activity_monitor_cv, &activity_monitor_mutex);
+        if (rc != 0) {
+          debug(1, "activity monitor cond_wait failed in am_active state: %d.", rc);
+          terminate = 1;
+          break;
+        }
+      }
+      if (terminate)
+        break;
 
       // if it's not already am_inactive, the it should be beginning to time out...
       if (state != am_inactive) {
@@ -191,7 +209,7 @@ void *activity_monitor_thread_code(void *arg) {
       break;
     case am_timing_out:
       rc = 0;
-      while ((player_state != ps_active) && (rc != ETIMEDOUT)) {
+      while ((player_state != ps_active) && (rc == 0)) {
 #ifdef COMPILE_FOR_LINUX_AND_FREEBSD_AND_CYGWIN_AND_OPENBSD
         rc = pthread_cond_timedwait(&activity_monitor_cv, &activity_monitor_mutex,
                                     &time_for_wait); // this is a pthread cancellation point
@@ -203,7 +221,14 @@ void *activity_monitor_thread_code(void *arg) {
         // check here -- otherwise a pending pthread_cancel() is never acted on
         pthread_testcancel();
 #endif
+        if ((rc != 0) && (rc != ETIMEDOUT)) {
+          debug(1, "activity monitor timed wait failed in am_timing_out state: %d.", rc);
+          terminate = 1;
+          break;
+        }
       }
+      if (terminate)
+        break;
       if (player_state == ps_active)
         state = am_active; // player has gone active -- do nothing, because it's still active
       else if (rc == ETIMEDOUT) {
@@ -223,20 +248,20 @@ void *activity_monitor_thread_code(void *arg) {
       state = am_inactive;
       break;
     }
-  } while (1);
-  pthread_mutex_unlock(&activity_monitor_mutex);
-  pthread_cleanup_pop(0); // should never happen
+  } while (!terminate);
+  activity_monitor_running = 0;
+  pthread_cleanup_pop(1);
   pthread_exit(NULL);
 }
 
-enum am_state activity_status() {
+enum am_state activity_status(void) {
   pthread_mutex_lock(&activity_monitor_mutex);
   enum am_state status = state;
   pthread_mutex_unlock(&activity_monitor_mutex);
   return status;
 }
 
-void activity_monitor_start() {
+void activity_monitor_start(void) {
   // debug(1,"activity_monitor_start");
   int rc = pthread_mutex_init(&activity_monitor_mutex, NULL);
   if (rc)
@@ -248,13 +273,19 @@ void activity_monitor_start() {
     die("activity_monitor: error %d initialising activity_monitor_cv.", rc);
   }
 
-  named_pthread_create(&activity_monitor_thread, NULL, activity_monitor_thread_code, NULL,
-                       "activity_mon");
+  rc = named_pthread_create(&activity_monitor_thread, NULL, activity_monitor_thread_code, NULL,
+                            "activity_mon");
+  if (rc != 0) {
+    pthread_cond_destroy(&activity_monitor_cv);
+    pthread_mutex_destroy(&activity_monitor_mutex);
+    die("activity_monitor: error %d creating activity_monitor thread.", rc);
+  }
   activity_monitor_running = 1;
 }
 
-void activity_monitor_stop() {
+void activity_monitor_stop(void) {
   if (activity_monitor_running) {
+    activity_monitor_running = 0;
     pthread_mutex_lock(&activity_monitor_mutex);
     enum am_state state_at_stop = state;
     enum ps_state player_state_at_stop = player_state;

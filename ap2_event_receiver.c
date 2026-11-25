@@ -35,6 +35,8 @@
 #include "metadata/core.h"
 #endif
 
+#ifdef CONFIG_AIRPLAY_2
+
 // will return -1 if there is an error, the port is not open or the response is not a valid
 // successful RTSP response, 0 if the port was closed and a positive number if okay
 ssize_t ap2_event_port_send_message(rtsp_conn_info *conn, char *data, size_t data_length) {
@@ -220,3 +222,25 @@ void *ap2_event_receiver(void *arg) {
   conn->ap2_event_receiver_exited = 1;
   pthread_exit(NULL);
 }
+
+#else
+
+ssize_t ap2_event_port_send_message(rtsp_conn_info *conn, char *data, size_t data_length) {
+  (void)conn;
+  (void)data;
+  (void)data_length;
+  return -1;
+}
+
+ssize_t ap2_event_port_post_command(rtsp_conn_info *conn, const void *command) {
+  (void)conn;
+  (void)command;
+  return -1;
+}
+
+void *ap2_event_receiver(void *arg) {
+  (void)arg;
+  return NULL;
+}
+
+#endif

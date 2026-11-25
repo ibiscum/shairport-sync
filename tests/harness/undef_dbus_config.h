@@ -1,0 +1,9 @@
+#pragma once
+
+#ifdef CONFIG_DBUS_INTERFACE
+#undef CONFIG_DBUS_INTERFACE
+#endif
+
+#ifdef CONFIG_MPRIS_INTERFACE
+#undef CONFIG_MPRIS_INTERFACE
+#endif

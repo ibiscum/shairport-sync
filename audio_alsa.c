@@ -47,6 +47,7 @@
 #include "activity_monitor.h"
 #include "audio.h"
 #include "common.h"
+#include "utilities/audio_alsa_safety.h"
 #include "utilities/string_utilities.h"
 
 enum alsa_backend_mode {
@@ -832,7 +833,7 @@ static int actual_open_alsa_device() {
         snd_pcm_uframes_t actual_buffer_size;
         snd_pcm_hw_params_get_buffer_size(alsa_params, &actual_buffer_size);
         if (actual_buffer_size != buffer_size_requested)
-          inform("Actual period size set to a different value than requested. "
+          inform("Actual buffer size set to a different value than requested. "
                  "Requested: %lu, actual "
                  "setting: %lu",
                  buffer_size_requested, actual_buffer_size);
@@ -862,7 +863,7 @@ static int actual_open_alsa_device() {
       snd_pcm_uframes_t actual_buffer_size;
       snd_pcm_hw_params_get_buffer_size(alsa_params, &actual_buffer_size);
       if (actual_buffer_size != buffer_size_requested)
-        inform("Actual period size set to a different value than requested. "
+        inform("Actual buffer size set to a different value than requested. "
                "Requested: %lu, actual "
                "setting: %lu",
                buffer_size_requested, actual_buffer_size);
@@ -1329,7 +1330,7 @@ static int init(int argc, char **argv) {
     if (config_lookup_int(config.cfg, "alsa.period_size", &value)) {
       set_period_size_request = 1;
       debug(1, "Value read for period size is %d.", value);
-      if (value < 0) {
+      if (audio_alsa_validate_strictly_positive_int(value) == 0) {
         warn("Invalid alsa period size setting \"%d\". It "
              "must be greater than 0. No setting is made.",
              value);
@@ -1343,7 +1344,7 @@ static int init(int argc, char **argv) {
     if (config_lookup_int(config.cfg, "alsa.buffer_size", &value)) {
       set_buffer_size_request = 1;
       debug(1, "Value read for buffer size is %d.", value);
-      if (value < 0) {
+      if (audio_alsa_validate_strictly_positive_int(value) == 0) {
         warn("Invalid alsa buffer size setting \"%d\". It "
              "must be greater than 0. No setting is made.",
              value);
@@ -1408,7 +1409,7 @@ static int init(int argc, char **argv) {
 
     /* Get the optional disable_standby_mode_default_rate. */
     if (config_lookup_int(config.cfg, "alsa.disable_standby_mode_default_rate", &value)) {
-      if (value < 0) {
+      if (audio_alsa_validate_strictly_positive_int(value) == 0) {
         warn("Invalid alsa disable_standby_mode_default_rate setting %d. It "
              "must be greater than 0. Default is %d. No setting is made.",
              value, disable_standby_mode_default_rate);
@@ -1419,7 +1420,7 @@ static int init(int argc, char **argv) {
 
     /* Get the optional disable_standby_mode_default_channels. */
     if (config_lookup_int(config.cfg, "alsa.disable_standby_mode_default_channels", &value)) {
-      if (value < 0) {
+      if (audio_alsa_validate_strictly_positive_int(value) == 0) {
         warn("Invalid alsa disable_standby_mode_default_channels setting %d. It "
              "must be greater than 0. Default is %d. No setting is made.",
              value, disable_standby_mode_default_channels);
@@ -1515,8 +1516,6 @@ static int init(int argc, char **argv) {
 
   return named_pthread_create_with_priority(&alsa_buffer_monitor_thread, 4,
                                             &alsa_buffer_monitor_thread_code, NULL, "alsa_buf_mon");
-
-  return 0;
 }
 
 static int check_configuration(unsigned int channels, unsigned int rate, unsigned int format) {
@@ -1551,6 +1550,7 @@ static int check_configuration(unsigned int channels, unsigned int rate, unsigne
 */
 
 static char *get_channel_map_str() {
+  audio_alsa_reset_channel_map_string(public_channel_map, sizeof(public_channel_map));
   if (alsa_handle != NULL) {
 
     snd_pcm_chmap_t *channel_map = snd_pcm_get_chmap(alsa_handle);
@@ -1980,6 +1980,12 @@ static int stats(uint64_t *raw_measurement_time, uint64_t *corrected_measurement
 static int do_play(void *buf, int samples) {
   // assuming the alsa_mutex has been acquired
   int ret = 0;
+  ret = audio_alsa_validate_play_request(buf, samples);
+  if (ret != 0) {
+    debug(1, "alsa: invalid play request with samples %d and buffer %p.", samples, buf);
+    return ret;
+  }
+
   if ((samples != 0) && (buf != NULL)) {
 
     int oldState;

@@ -88,8 +88,8 @@ void alac_allocate_buffers(alac_file *alac) {
   alac->uncompressed_bytes_buffer_b = malloc(alac->setinfo_max_samples_per_frame * 4);
 }
 
-void alac_set_info(alac_file *alac, char *inputbuffer) {
-  char *ptr = inputbuffer;
+void alac_set_info(alac_file *alac, const char *inputbuffer) {
+  const char *ptr = inputbuffer;
   ptr += 4; /* size */
   ptr += 4; /* frma */
   ptr += 4; /* alac */
@@ -233,7 +233,11 @@ static int count_leading_zeros(int32_t input)
 /* for some reason the unrolled version (below) is
  * actually faster than this. yay intel!
  */
-static int count_leading_zeros(int input) { return __builtin_clz(input); }
+static int count_leading_zeros(int input) {
+  if (!input)
+    return 32;
+  return __builtin_clz((unsigned int)input);
+}
 #elif defined(_MSC_VER) && defined(_M_IX86)
 static int count_leading_zeros(int input) {
   int output = 0;
@@ -385,6 +389,9 @@ static void entropy_rice_decode(alac_file *alac, int32_t *outputBuffer, int outp
 
       // got blockSize 0s
       if (blockSize > 0) {
+        int32_t remaining = outputSize - (outputCount + 1);
+        if (blockSize > remaining)
+          blockSize = remaining;
         memset(&outputBuffer[outputCount + 1], 0, blockSize * sizeof(*outputBuffer));
         outputCount += blockSize;
       }
@@ -641,10 +648,26 @@ static void deinterlace_24(int32_t *buffer_a, int32_t *buffer_b, int uncompresse
   }
 }
 
-void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer, int *outputsize) {
-  int outbuffer_allocation_size = *outputsize; // initial value
+void alac_decode_frame(alac_file *alac, const unsigned char *inbuffer, void *outbuffer,
+                       int *outputsize) {
+  int outbuffer_allocation_size;
   int channels;
-  int32_t outputsamples = alac->setinfo_max_samples_per_frame;
+  int32_t outputsamples;
+
+  if (!alac || !inbuffer || !outbuffer || !outputsize) {
+    if (outputsize)
+      *outputsize = 0;
+    return;
+  }
+
+  if (!alac->predicterror_buffer_a || !alac->outputsamples_buffer_a ||
+      !alac->uncompressed_bytes_buffer_a) {
+    *outputsize = 0;
+    return;
+  }
+
+  outputsamples = alac->setinfo_max_samples_per_frame;
+  outbuffer_allocation_size = *outputsize; // initial value
 
   /* setup the stream */
   alac->input_buffer = inbuffer;
@@ -739,6 +762,8 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
       } else {
         fprintf(stderr, "FIXME: unhandled prediction type for compressed case: %i\n",
                 prediction_type);
+        *outputsize = 0;
+        return;
         /* i think the only other prediction type (or perhaps this is just a
          * boolean?) runs adaptive fir twice.. like:
          * predictor_decompress_fir_adapt(predictor_error, tempout, ...)
@@ -807,6 +832,8 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
     case 20:
     case 32:
       fprintf(stderr, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
+      *outputsize = 0;
+      return;
       break;
     default:
       break;
@@ -851,6 +878,12 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
     }
 
     readsamplesize = alac->setinfo_sample_size - (uncompressed_bytes * 8) + 1;
+
+    if (!alac->predicterror_buffer_b || !alac->outputsamples_buffer_b ||
+        !alac->uncompressed_bytes_buffer_b) {
+      *outputsize = 0;
+      return;
+    }
 
     if (!isnotcompressed) { /* compressed */
       int16_t predictor_coef_table_a[32];
@@ -915,6 +948,8 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
                                        predictor_coef_num_a, prediction_quantitization_a);
       } else { /* see mono case */
         fprintf(stderr, "FIXME: unhandled prediction type on channel 1: %i\n", prediction_type_a);
+        *outputsize = 0;
+        return;
       }
 
       /* channel 2 */
@@ -929,6 +964,8 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
                                        predictor_coef_num_b, prediction_quantitization_b);
       } else {
         fprintf(stderr, "FIXME: unhandled prediction type on channel 2: %i\n", prediction_type_b);
+        *outputsize = 0;
+        return;
       }
     } else { /* not compressed, easy case */
       if (alac->setinfo_sample_size <= 16) {
@@ -986,6 +1023,8 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
     case 20:
     case 32:
       fprintf(stderr, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
+      *outputsize = 0;
+      return;
       break;
     default:
       break;
@@ -993,6 +1032,9 @@ void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer
 
     break;
   }
+  default:
+    *outputsize = 0;
+    return;
   }
 }
 

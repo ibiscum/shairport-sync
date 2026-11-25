@@ -74,22 +74,43 @@ static int prepare() {
 static int play(void *buf, int samples, __attribute__((unused)) int sample_type,
                 __attribute__((unused)) uint32_t timestamp,
                 __attribute__((unused)) uint64_t playtime) {
+  if (samples < 0)
+    return -EINVAL;
+  if ((samples > 0) && (buf == NULL))
+    return -EINVAL;
+  if (bytes_per_frame == 0) {
+    debug(1, "pipe: bytes per frame not initialised before play()!");
+    return -EINVAL;
+  }
+
   // if the file is not open, try to open it.
   char errorstring[1024];
   if (fd == -1) {
     fd = try_to_open_pipe_for_writing(pipename);
   }
   // if it's got a reader, write to it.
-  if (fd > 0) {
-    // int rc = non_blocking_write(fd, buf, samples * 4);
-    if (bytes_per_frame == 0)
-      debug(1, "pipe: bytes per frame not initialised before play()!");
+  if (fd >= 0) {
     size_t bytes_to_write = (size_t)samples * bytes_per_frame;
-    int rc = write(fd, buf, bytes_to_write);
-    if ((rc < 0) && (errno != EPIPE) && (warned == 0)) {
-      strerror_r(errno, (char *)errorstring, 1024);
-      debug(1, "error %d writing to the pipe named \"%s\": \"%s\".", errno, pipename, errorstring);
-      warned = 1;
+    size_t total_written = 0;
+    while (total_written < bytes_to_write) {
+      ssize_t rc = write(fd, (const uint8_t *)buf + total_written, bytes_to_write - total_written);
+      if (rc > 0) {
+        total_written += (size_t)rc;
+      } else if ((rc < 0) && ((errno == EINTR) || (errno == EAGAIN))) {
+        continue;
+      } else if ((rc < 0) && (errno == EPIPE)) {
+        safe_socket_close(&fd);
+        warned = 0;
+        return -EPIPE;
+      } else {
+        if ((rc < 0) && (warned == 0)) {
+          strerror_r(errno, (char *)errorstring, 1024);
+          debug(1, "error %d writing to the pipe named \"%s\": \"%s\".", errno, pipename,
+                errorstring);
+          warned = 1;
+        }
+        return -1;
+      }
     }
   }
   return 0;
@@ -122,8 +143,6 @@ static int init(int argc, char **argv) {
     const char *str;
     if (config_lookup_non_empty_string(config.cfg, "pipe.name", &str)) {
       pipename = (char *)str;
-    } else {
-      die("pipename needed");
     }
   }
 
@@ -170,7 +189,7 @@ static int configure(int32_t requested_encoded_format, __attribute__((unused)) c
   if (bytes_per_sample == 0) {
     debug(1, "pipe: unknown output format.");
     bytes_per_sample = 4; // emergency hack
-    response = EINVAL;
+    response = -EINVAL;
   }
   bytes_per_frame = bytes_per_sample * CHANNELS_FROM_ENCODED_FORMAT(requested_encoded_format);
   return response;

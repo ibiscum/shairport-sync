@@ -40,6 +40,7 @@
 #include "FFTConvolver/convolver.h"
 #endif
 
+#ifdef CONFIG_AIRPLAY_2
 
 void addADTStoPacket(uint8_t *packet, int packetLen, int rate, int channel_configuration) {
   // https://stackoverflow.com/questions/18862715/how-to-generate-the-aac-adts-elementary-stream-with-android-mediacodec
@@ -798,3 +799,12 @@ void *rtp_buffered_audio_processor(void *arg) {
   //       syscall(SYS_gettid));
   pthread_exit(NULL);
 }
+
+#else
+
+void *rtp_buffered_audio_processor(void *arg) {
+  (void)arg;
+  return NULL;
+}
+
+#endif

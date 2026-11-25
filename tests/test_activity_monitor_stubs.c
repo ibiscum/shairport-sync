@@ -10,6 +10,8 @@
 int command_execute_call_count = 0;
 int command_execute_last_block = -1;
 const char *command_execute_last_command = NULL;
+int named_pthread_create_call_count = 0;
+int named_pthread_create_return_value = 0;
 
 shairport_cfg config;
 
@@ -17,6 +19,8 @@ void reset_command_execute_stub(void) {
   command_execute_call_count = 0;
   command_execute_last_block = -1;
   command_execute_last_command = NULL;
+  named_pthread_create_call_count = 0;
+  named_pthread_create_return_value = 0;
 }
 
 void command_execute(const char *command, const char *extra_argument,
@@ -33,12 +37,11 @@ int named_pthread_create(pthread_t *restrict thread,
                          const pthread_attr_t *restrict attr,
                          void *(*start_routine)(void *), void *restrict arg,
                          const char *format, ...) {
-  (void)thread;
-  (void)attr;
-  (void)start_routine;
-  (void)arg;
   (void)format;
-  return 0;
+  named_pthread_create_call_count++;
+  if (named_pthread_create_return_value != 0)
+    return named_pthread_create_return_value;
+  return pthread_create(thread, attr, start_routine, arg);
 }
 
 uint64_t get_realtime_in_ns(void) { return 0; }

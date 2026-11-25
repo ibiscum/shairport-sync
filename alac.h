@@ -27,21 +27,22 @@
  *
  */
 
-#ifndef __ALAC__DECOMP_H
-#define __ALAC__DECOMP_H
+#ifndef ALAC_DECOMP_H
+#define ALAC_DECOMP_H
 
 #include <stdint.h>
 
 typedef struct alac_file alac_file;
 
 alac_file *alac_create(int samplesize, int numchannels);
-void alac_decode_frame(alac_file *alac, unsigned char *inbuffer, void *outbuffer, int *outputsize);
-void alac_set_info(alac_file *alac, char *inputbuffer);
+void alac_decode_frame(alac_file *alac, const unsigned char *inbuffer, void *outbuffer,
+                       int *outputsize);
+void alac_set_info(alac_file *alac, const char *inputbuffer);
 void alac_allocate_buffers(alac_file *alac);
 void alac_free(alac_file *alac);
 
 struct alac_file {
-  unsigned char *input_buffer;
+  const unsigned char *input_buffer;
   int input_buffer_bitaccumulator; /* used so we can do arbitrary
                                       bit reads */
 
@@ -69,9 +70,9 @@ struct alac_file {
   uint8_t setinfo_7f;                                         /* 0x02 */
   uint16_t setinfo_80;                                        /* 0x00ff */
   uint32_t setinfo_82; /* 0x000020e7 */                       /* max sample size?? */
-  uint32_t setinfo_86; /* 0x00069fe4 */                       /* bit rate (avarge)?? */
+  uint32_t setinfo_86; /* 0x00069fe4 */                       /* bit rate (average)?? */
   uint32_t setinfo_8a_rate;                                   /* 0x0000ac44 */
   /* end setinfo stuff */
 };
 
-#endif /* __ALAC__DECOMP_H */
+#endif /* ALAC_DECOMP_H */
