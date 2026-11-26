@@ -152,8 +152,9 @@ static void on_message(__attribute__((unused)) struct mosquitto *mosq,
   int it = 0;
   int found = 0;
   while ((commands[it].name != NULL) && (found == 0)) {
-    found = ((size_t)msg->payloadlen >= strlen(commands[it].name) &&
-             strncmp(msg->payload, commands[it].name, strlen(commands[it].name)) == 0);
+    size_t name_len = strlen(commands[it].name);
+    found = (strncmp(command, commands[it].name, name_len) == 0) &&
+            ((command[name_len] == '\0') || isspace((unsigned char)command[name_len]));
     if (found == 0)
       it++;
   }
@@ -167,7 +168,7 @@ static void on_message(__attribute__((unused)) struct mosquitto *mosq,
     // payload is "queue_next <track_id>", where <track_id> is the hex track_id
     // string as published by shairport-sync itself (see the "mper"/"track_id" handling
     // above), e.g. "queue_next 1A2B3C4D5E6F7"
-    char *track_id = payload + strlen(commands[it].name);
+    char *track_id = command + strlen(commands[it].name);
     while (*track_id == ' ' || *track_id == '\t')
       track_id++;
     size_t track_id_len = strlen(track_id);

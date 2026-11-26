@@ -65,7 +65,7 @@ static mdns_backend *mdns_backends[] = {
     &mdns_external_dns_sd,
 #endif
 #ifdef CONFIG_METADATA
-    &mdns_metadata, // only when selected by name
+    &mdns_metadata, // currently available as a fallback backend
 #endif
     NULL};
 
@@ -149,7 +149,9 @@ void mdns_register(char **txt_records, char **secondary_txt_records) {
 
 void mdns_update(char **txt_records, char **secondary_txt_records) {
   if ((config.mdns) && (config.mdns->mdns_update)) {
-    config.mdns->mdns_update(txt_records, secondary_txt_records);
+    int rc = config.mdns->mdns_update(txt_records, secondary_txt_records);
+    if (rc != 0)
+      debug(1, "mdns_update failed for backend \"%s\" with error %d.", config.mdns->name, rc);
   } else
     debug(1, "Can't mdns_update -- no mdns_update registered.");
 }

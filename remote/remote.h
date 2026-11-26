@@ -8,7 +8,7 @@
 // from rcsc_play to rcsc_rewind_stop, the encoded number corresponds
 // to the command number used in the actual AP2 remote control command
 
-// some of these are used only in mqtt.c
+// some commands are parsed from MQTT control input and dispatched through remote.c
 
 typedef enum {
   rcsc_play = 0,

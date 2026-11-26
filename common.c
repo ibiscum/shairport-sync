@@ -1312,13 +1312,15 @@ APST_t string_to_service_type(const char *parameter, const char *setting_name) {
       response = APST_auto;
     } else if (strcasecmp(parameter, "classic") == 0) {
       response = APST_classic;
+    } else if (strcasecmp(parameter, "forced_classic") == 0) {
+      response = APST_forced_classic;
     } else if (strcasecmp(parameter, "airplay1") == 0) {
       response = APST_classic;
     } else if (strcasecmp(parameter, "airplay2") == 0) {
       response = APST_airplay2;
     } else {
-      warn("The %s \"%s\" was ignored. It must be \"auto\", \"classic\" or \"airplay2\". (You can "
-           "use \"airplay1\" instead of \"classic\".)",
+      warn("The %s \"%s\" was ignored. It must be \"auto\", \"classic\", \"forced_classic\" or "
+           "\"airplay2\". (You can use \"airplay1\" instead of \"classic\".)",
            setting_name, parameter);
     }
 #ifndef CONFIG_AIRPLAY_2
@@ -2238,7 +2240,8 @@ int string_update_with_size(char **str, int *flag, char *s, size_t len) {
         memcpy(p, s, len);
         p[len] = '\0';
         *str = p;
-        *flag = 1;
+        if (flag)
+          *flag = 1;
       } else {
         if (flag)
           *flag = 0;

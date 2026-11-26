@@ -18,15 +18,18 @@ int avahi_unregister_call_count = 0;
 int avahi_monitor_start_call_count = 0;
 int avahi_monitor_stop_call_count = 0;
 int avahi_monitor_set_id_call_count = 0;
+int avahi_update_call_count = 0;
 
 int dns_register_call_count = 0;
 int dns_unregister_call_count = 0;
 int dns_monitor_start_call_count = 0;
 int dns_monitor_stop_call_count = 0;
 int dns_monitor_set_id_call_count = 0;
+int dns_update_call_count = 0;
 
 static int avahi_register_result = 0;
 static int dns_register_result = 0;
+static int avahi_update_result = 0;
 
 void mdns_test_reset_stubs(void) {
   mdns_test_die_called = 0;
@@ -37,15 +40,18 @@ void mdns_test_reset_stubs(void) {
   avahi_monitor_start_call_count = 0;
   avahi_monitor_stop_call_count = 0;
   avahi_monitor_set_id_call_count = 0;
+  avahi_update_call_count = 0;
 
   dns_register_call_count = 0;
   dns_unregister_call_count = 0;
   dns_monitor_start_call_count = 0;
   dns_monitor_stop_call_count = 0;
   dns_monitor_set_id_call_count = 0;
+  dns_update_call_count = 0;
 
   avahi_register_result = 0;
   dns_register_result = 0;
+  avahi_update_result = 0;
 }
 
 void mdns_test_enable_die_trap(int enabled) { mdns_test_die_trap_enabled = enabled; }
@@ -53,6 +59,8 @@ void mdns_test_enable_die_trap(int enabled) { mdns_test_die_trap_enabled = enabl
 void mdns_test_set_avahi_register_result(int result) { avahi_register_result = result; }
 
 void mdns_test_set_dns_register_result(int result) { dns_register_result = result; }
+
+void mdns_test_set_avahi_update_result(int result) { avahi_update_result = result; }
 
 static int avahi_register(char *ap1name, char *ap2name, int port, char **txt_records,
                           char **secondary_txt_records) {
@@ -76,9 +84,16 @@ static void avahi_monitor_set_id(const char *dacp_id) {
   avahi_monitor_set_id_call_count++;
 }
 
+static int avahi_update(char **txt_records, char **secondary_txt_records) {
+  (void)txt_records;
+  (void)secondary_txt_records;
+  avahi_update_call_count++;
+  return avahi_update_result;
+}
+
 mdns_backend mdns_avahi = {.name = "avahi",
                            .mdns_register = avahi_register,
-                           .mdns_update = NULL,
+                           .mdns_update = avahi_update,
                            .mdns_unregister = avahi_unregister,
                            .mdns_dacp_monitor_start = avahi_monitor_start,
                            .mdns_dacp_monitor_set_id = avahi_monitor_set_id,
@@ -106,9 +121,16 @@ void dns_monitor_set_id(const char *dacp_id) {
   dns_monitor_set_id_call_count++;
 }
 
+static int dns_update(char **txt_records, char **secondary_txt_records) {
+  (void)txt_records;
+  (void)secondary_txt_records;
+  dns_update_call_count++;
+  return 0;
+}
+
 mdns_backend mdns_dns_sd = {.name = "dns-sd",
                             .mdns_register = dns_register,
-                            .mdns_update = NULL,
+                            .mdns_update = dns_update,
                             .mdns_unregister = dns_unregister,
                             .mdns_dacp_monitor_start = dns_monitor_start,
                             .mdns_dacp_monitor_set_id = dns_monitor_set_id,
@@ -116,7 +138,7 @@ mdns_backend mdns_dns_sd = {.name = "dns-sd",
 
 mdns_backend mdns_metadata = {.name = "metadata",
                               .mdns_register = dns_register,
-                              .mdns_update = NULL,
+                              .mdns_update = dns_update,
                               .mdns_unregister = dns_unregister,
                               .mdns_dacp_monitor_start = dns_monitor_start,
                               .mdns_dacp_monitor_set_id = dns_monitor_set_id,

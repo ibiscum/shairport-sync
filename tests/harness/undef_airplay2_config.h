@@ -1,0 +1,3 @@
+#ifdef CONFIG_AIRPLAY_2
+#undef CONFIG_AIRPLAY_2
+#endif

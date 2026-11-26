@@ -253,7 +253,7 @@ ssize_t ap2_event_send_dev_mule(unsigned int parameter) {
   return result;
 }
 */
-ssize_t ap2_event_send_dev_mule(unsigned int repeat_mode) {
+ssize_t ap2_event_send_dev_mule(unsigned int command_number) {
   ssize_t result = -1;
   rtsp_conn_info *conn = principal_conn;
   if (conn != NULL) {
@@ -265,7 +265,7 @@ ssize_t ap2_event_send_dev_mule(unsigned int repeat_mode) {
 
     plist_t params = paramsPlist(0, conn->airplay_gid);
     if (params != NULL)
-      plist_dict_set_item(params, "kMRMediaRemoteOptionShuffleMode", plist_new_uint(repeat_mode));
+      plist_dict_set_item(params, "kMRMediaRemoteOptionShuffleMode", plist_new_uint(command_number));
     plist_dict_set_item(modernMediaCommand, "params", params);
 
     result = ap2_event_port_post_command(conn, modernMediaCommand);
@@ -457,16 +457,17 @@ void remote_increment_volume(int up) {
 #endif
 
 void remote_volumeup() {
-// int available = 0;
+  int available = 0;
 #ifdef CONFIG_DACP_CLIENT
-  if (metadata_store.dacp_server_active) {
+  available = metadata_store.dacp_server_active;
+  if (available) {
     debug(4, "remote_volumeup -- DACP active.");
     send_simple_dacp_command("volumeup");
   }
 #endif
 #ifdef CONFIG_AIRPLAY_2
-  // if (available == 0)
-  remote_increment_volume(1); // increment up
+  if (available == 0)
+    remote_increment_volume(1); // increment up
 #endif
 }
 
@@ -624,7 +625,7 @@ int remote_set_repeat_mode(repeat_status_type mode) {
 }
 
 int remote_set_shuffle_mode(shuffle_status_type mode) {
-  int handled = 1;                             // default
+  int handled = 0;
   pthread_rwlock_rdlock(&principal_conn_lock); // don't let the principal_conn be changed
   pthread_cleanup_push(rwlock_unlock, (void *)&principal_conn_lock);
   if (principal_conn != NULL) {
@@ -659,6 +660,7 @@ int remote_set_shuffle_mode(shuffle_status_type mode) {
           debug(1, "DACP invalid shuffle mode request -- ignored.");
           break;
         }
+        handled = 1;
       } else {
         inform("Can't set loop status / repeat mode -- advanced remote control is not available "
                "for this client.");

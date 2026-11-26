@@ -12,6 +12,10 @@ typedef struct dacp_speaker_stuff {
   char name[128]; // this is really just for debugging
 } dacp_spkr_stuff;
 
+#define DACP_FOURCC(a, b, c, d)                                                                  \
+  (((uint32_t)(uint8_t)(a) << 24) | ((uint32_t)(uint8_t)(b) << 16) |                             \
+   ((uint32_t)(uint8_t)(c) << 8) | (uint32_t)(uint8_t)(d))
+
 void dacp_monitor_start();
 void dacp_monitor_stop();
 

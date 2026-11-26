@@ -6,6 +6,8 @@ check_PROGRAMS = \
 	test_activity_monitor \
 	test_alac \
 	test_alac_compressed \
+	test_common_header_self_containment \
+	test_common_header_api_contract \
 	test_alac_header_self_containment \
 	test_alac_header_api_contract \
 	test_ap2_buffered_audio_processor_header_self_containment \
@@ -16,10 +18,13 @@ check_PROGRAMS = \
 	test_ap2_event_receiver_header_api_contract \
 	test_ap2_packet_validation \
 	test_ap2_buffered_gate_integration \
+	test_audiofft_regression \
 	test_audio_regression \
+	test_loudness_regression \
 	test_audio_alsa_regression \
 	test_audio_pipe_regression \
 	test_audio_pw_safety \
+	test_dacp_regression \
 	test_dacp_safety \
 	test_dacp_lifecycle_safety \
 	test_metadata_core \
@@ -30,6 +35,15 @@ check_PROGRAMS = \
 	test_metadata_hub_header_api_contract \
 	test_metadata_fourcc \
 	test_mdns_minimal \
+	test_mdns_avahi_regression \
+	test_mdns_header_self_containment \
+	test_mdns_header_api_contract \
+	test_mqtt_regression \
+	test_remote_regression \
+	test_remote_header_self_containment \
+	test_remote_header_api_contract \
+	test_loudness_header_self_containment \
+	test_loudness_header_api_contract \
 	test_mqtt_header_self_containment \
 	test_mqtt_header_api_contract \
 	test_tinysvcmdns_labels_regression \
@@ -38,6 +52,7 @@ check_PROGRAMS = \
 	test_ptp_utilities_regression \
 	test_player_common_regression \
 	test_player_common_unit \
+	test_common_regression \
 	test_rtsp_line_regression \
 	test_rtp_minimal \
 	test_tinyhttp_parser_regression
@@ -74,6 +89,14 @@ test_alac_compressed_SOURCES = \
 	$(top_srcdir)/alac.c
 test_alac_compressed_LDFLAGS = -pthread
 test_alac_compressed_LDADD = $(CMOCKA_LIBS)
+
+test_common_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_common_header_self_containment_SOURCES = test_common_header_self_containment.c
+test_common_header_self_containment_LDFLAGS = -pthread
+
+test_common_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_common_header_api_contract_SOURCES = test_common_header_api_contract.c
+test_common_header_api_contract_LDFLAGS = -pthread
 
 test_alac_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
 test_alac_header_self_containment_SOURCES = test_alac_header_self_containment.c
@@ -129,10 +152,25 @@ test_ap2_buffered_gate_integration_SOURCES = \
 test_ap2_buffered_gate_integration_LDFLAGS = -pthread
 test_ap2_buffered_gate_integration_LDADD = $(CMOCKA_LIBS)
 
+test_audiofft_regression_CXXFLAGS = -std=c++11 -pthread
+test_audiofft_regression_SOURCES = \
+	test_audiofft_regression.cpp \
+	$(top_srcdir)/FFTConvolver/AudioFFT.cpp
+test_audiofft_regression_LDFLAGS = -pthread
+test_audiofft_regression_LDADD = -lm
+
 test_audio_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_audio_regression_SOURCES = test_audio_regression.c
 test_audio_regression_LDFLAGS = -pthread
 test_audio_regression_LDADD = $(CMOCKA_LIBS)
+
+test_loudness_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_loudness_regression_SOURCES = \
+	test_loudness_regression.c \
+	test_loudness_regression_stubs.c \
+	$(top_srcdir)/loudness.c
+test_loudness_regression_LDFLAGS = -pthread
+test_loudness_regression_LDADD = $(CMOCKA_LIBS) -lm
 
 test_audio_alsa_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_audio_alsa_regression_SOURCES = \
@@ -152,6 +190,14 @@ test_audio_pw_safety_SOURCES = \
 	$(top_srcdir)/utilities/audio_pw_safety.c
 test_audio_pw_safety_LDFLAGS = -pthread
 test_audio_pw_safety_LDADD = $(CMOCKA_LIBS)
+
+test_dacp_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
+test_dacp_regression_SOURCES = \
+	test_dacp_regression.c \
+	test_dacp_regression_stubs.c \
+	$(top_srcdir)/dacp.c
+test_dacp_regression_LDFLAGS = -pthread
+test_dacp_regression_LDADD = $(CMOCKA_LIBS)
 
 test_dacp_safety_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_dacp_safety_SOURCES = test_dacp_safety.c
@@ -215,6 +261,55 @@ test_mdns_minimal_SOURCES = \
 test_mdns_minimal_LDFLAGS = -pthread
 test_mdns_minimal_LDADD = $(CMOCKA_LIBS)
 
+test_mdns_avahi_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -I$(top_srcdir)/tests
+test_mdns_avahi_regression_SOURCES = \
+	test_mdns_avahi_regression.c \
+	test_mdns_avahi_regression_stubs.c \
+	$(top_srcdir)/mdns/mdns_avahi.c
+test_mdns_avahi_regression_LDFLAGS = -pthread
+test_mdns_avahi_regression_LDADD = $(CMOCKA_LIBS)
+
+test_mdns_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_mdns_header_self_containment_SOURCES = test_mdns_header_self_containment.c
+test_mdns_header_self_containment_LDFLAGS = -pthread
+
+test_mdns_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_mdns_header_api_contract_SOURCES = test_mdns_header_api_contract.c
+test_mdns_header_api_contract_LDFLAGS = -pthread
+
+test_mqtt_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -DCONFIG_MQTT
+test_mqtt_regression_SOURCES = \
+	test_mqtt_regression.c \
+	test_mqtt_regression_stubs.c \
+	$(top_srcdir)/mqtt.c
+test_mqtt_regression_LDFLAGS = -pthread
+test_mqtt_regression_LDADD = $(CMOCKA_LIBS)
+
+test_remote_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -DCONFIG_DACP_CLIENT \
+	-include $(top_srcdir)/tests/harness/undef_airplay2_config.h
+test_remote_regression_SOURCES = \
+	test_remote_regression.c \
+	test_remote_regression_stubs.c \
+	$(top_srcdir)/remote/remote.c
+test_remote_regression_LDFLAGS = -pthread
+test_remote_regression_LDADD = $(CMOCKA_LIBS)
+
+test_remote_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_remote_header_self_containment_SOURCES = test_remote_header_self_containment.c
+test_remote_header_self_containment_LDFLAGS = -pthread
+
+test_remote_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_remote_header_api_contract_SOURCES = test_remote_header_api_contract.c
+test_remote_header_api_contract_LDFLAGS = -pthread
+
+test_loudness_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
+test_loudness_header_self_containment_SOURCES = test_loudness_header_self_containment.c
+test_loudness_header_self_containment_LDFLAGS = -pthread
+
+test_loudness_header_api_contract_CFLAGS = $(AM_CFLAGS) -pthread
+test_loudness_header_api_contract_SOURCES = test_loudness_header_api_contract.c
+test_loudness_header_api_contract_LDFLAGS = -pthread
+
 test_mqtt_header_self_containment_CFLAGS = $(AM_CFLAGS) -pthread
 test_mqtt_header_self_containment_SOURCES = test_mqtt_header_self_containment.c
 test_mqtt_header_self_containment_LDFLAGS = -pthread
@@ -261,6 +356,14 @@ test_player_common_unit_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_player_common_unit_SOURCES = test_player_common_unit.c
 test_player_common_unit_LDFLAGS = -pthread
 test_player_common_unit_LDADD = $(CMOCKA_LIBS)
+
+test_common_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread -ffunction-sections \
+	-DSYSCONFDIR=\"$(sysconfdir)\"
+test_common_regression_SOURCES = \
+	test_common_regression.c \
+	$(top_srcdir)/common.c
+test_common_regression_LDFLAGS = -pthread -Wl,--gc-sections
+test_common_regression_LDADD = $(CMOCKA_LIBS)
 
 test_rtsp_line_regression_CFLAGS = $(AM_CFLAGS) $(CMOCKA_CFLAGS) -pthread
 test_rtsp_line_regression_SOURCES = \

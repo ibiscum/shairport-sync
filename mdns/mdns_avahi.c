@@ -27,6 +27,7 @@
 
 #include <pthread.h>
 #include <stdlib.h>
+#include <assert.h>
 
 
 #include "common.h"
@@ -61,7 +62,7 @@ void threaded_poll_unlock(void *arg) { avahi_threaded_poll_unlock((AvahiThreaded
   {                                                                                                \
     int rc = veryUnLikelyArgumentName;                                                             \
     if (rc)                                                                                        \
-      debug(debugLevelArg, "avahi call response %d at __FILE__, __LINE__)", rc);                   \
+      debug(debugLevelArg, "avahi call response %d at %s:%d", rc, __FILE__, __LINE__);            \
   }
 
 typedef struct {
@@ -126,7 +127,8 @@ static void resolve_callback(AvahiServiceResolver *r, AVAHI_GCC_UNUSED AvahiIfIn
 #ifdef CONFIG_METADATA
           char port_in_chars[16];
           snprintf(port_in_chars, 7, "%u", lport);
-          send_ssnc_metadata('dapo', port_in_chars, strlen(port_in_chars), 0);
+          send_ssnc_metadata(METADATA_FOURCC('d', 'a', 'p', 'o'), port_in_chars,
+                             strlen(port_in_chars), 0);
 #endif
         }
       } else {
@@ -177,7 +179,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface, Avah
         dacp_monitor_port_update_callback(dbs->dacp_id, 0); // say the port is withdrawn
 #endif
 #ifdef CONFIG_METADATA
-        send_ssnc_metadata('dapo', "0", strlen("0"), 0);
+        send_ssnc_metadata(METADATA_FOURCC('d', 'a', 'p', 'o'), "0", strlen("0"), 0);
 #endif
       }
     } else {
@@ -436,6 +438,7 @@ static int avahi_update(char **txt_records, char **secondary_txt_records) {
     port = srvport;
   */
   int err = 0;
+  int rv = 0;
   if (tpoll == NULL) {
     debug(1, "avahi_update called while Avahi thread poll is not available.");
     return -1;
@@ -461,38 +464,46 @@ static int avahi_update(char **txt_records, char **secondary_txt_records) {
   if (txt_records != NULL) {
     if (text_record_string_list)
       avahi_string_list_free(text_record_string_list);
+    text_record_string_list = NULL;
     if (*txt_records != NULL) {
       text_record_string_list = avahi_string_list_new_from_array((const char **)txt_records, -1);
       err = avahi_entry_group_update_service_txt_strlst(
           group, selected_interface, AVAHI_PROTO_UNSPEC, 0, service_name, config.regtype, NULL,
           text_record_string_list);
-      if (err != 0)
+      if (err != 0) {
         debug(1,
               "avahi_entry_group_update_service_txt_strlst error \"%s\" updating primary txt "
               "records.",
               avahi_strerror(err));
+        if (rv == 0)
+          rv = err;
+      }
     }
   }
 
   if (secondary_txt_records != NULL) {
     if (ap2_text_record_string_list)
       avahi_string_list_free(ap2_text_record_string_list);
+    ap2_text_record_string_list = NULL;
     if (*secondary_txt_records != NULL) {
       ap2_text_record_string_list =
           avahi_string_list_new_from_array((const char **)secondary_txt_records, -1);
       err = avahi_entry_group_update_service_txt_strlst(
           group, selected_interface, AVAHI_PROTO_UNSPEC, 0, ap2_service_name, config.regtype2, NULL,
           ap2_text_record_string_list);
-      if (err != 0)
+      if (err != 0) {
         debug(1,
               "avahi_entry_group_update_service_txt_strlst error \"%s\" updating secondary txt "
               "records.",
               avahi_strerror(err));
+        if (rv == 0)
+          rv = err;
+      }
     }
   }
 
   pthread_cleanup_pop(1); // unlock the avahi_threaded_poll_lock
-  return 0;
+  return rv;
 }
 
 static int avahi_register(char *ap1name, char *ap2name, int srvport, char **txt_records,
@@ -578,6 +589,11 @@ static void avahi_unregister(void) {
   if (tpoll) {
     debug(2, "avahi: stop the threaded poll.");
     avahi_threaded_poll_stop(tpoll);
+
+    if (group) {
+      debug(2, "avahi: free the entry group.");
+      check_avahi_response(1, deregister_service(client));
+    }
 
     if (client) {
       debug(2, "avahi: free the client.");

@@ -757,7 +757,8 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
           // ensure there is enough in the buffer for the type (4 bytes) and length (4 bytes)
           // here start looking for the contents of the status update
           // type code and length always take two uint32_ts
-          if (dacp_tlv_crawl(&sp, remaining_bytes_in_response, &item_size) == 'cmst') { // status
+          if (dacp_tlv_crawl(&sp, remaining_bytes_in_response, &item_size) ==
+              DACP_FOURCC('c', 'm', 's', 't')) { // status
             // here, we know that we are receiving playerstatusupdates, so set a flag
             metadata_hub_modify_prolog();
             int metadata_changed = 0;
@@ -776,12 +777,12 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
               uint32_t ui;
 
               switch (type) {
-              case 'cmsr': // revision number
+              case DACP_FOURCC('c', 'm', 's', 'r'): // revision number
                 t = sp - item_size;
                 revision_number = ntohl(*(uint32_t *)(t));
                 // debug(1,"New revision number received: %d", revision_number);
                 break;
-              case 'caps': // play status
+              case DACP_FOURCC('c', 'a', 'p', 's'): // play status
                 t = sp - item_size;
                 r = *(unsigned char *)(t);
                 switch (r) {
@@ -811,7 +812,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   break;
                 }
                 break;
-              case 'cash': // shuffle status
+              case DACP_FOURCC('c', 'a', 's', 'h'): // shuffle status
                 t = sp - item_size;
                 r = *(unsigned char *)(t);
                 switch (r) {
@@ -834,7 +835,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   break;
                 }
                 break;
-              case 'carp': // repeat status
+              case DACP_FOURCC('c', 'a', 'r', 'p'): // repeat status
                 t = sp - item_size;
                 r = *(unsigned char *)(t);
                 switch (r) {
@@ -864,7 +865,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   break;
                 }
                 break;
-              case 'cann': // track name
+              case DACP_FOURCC('c', 'a', 'n', 'n'): // track name
                 debug(2, "DACP Track Name seen");
 
                 if (update_string_record_with_data(&metadata_store.npi.track_name, sp - item_size,
@@ -873,7 +874,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   metadata_changed |= 1;
                 }
                 break;
-              case 'cana': // artist name
+              case DACP_FOURCC('c', 'a', 'n', 'a'): // artist name
                 debug(2, "DACP Artist Name seen");
                 if (update_string_record_with_data(&metadata_store.npi.artist_name, sp - item_size,
                                                    item_size)) {
@@ -881,7 +882,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   metadata_changed |= 1;
                 }
                 break;
-              case 'canl': // album name
+              case DACP_FOURCC('c', 'a', 'n', 'l'): // album name
                 debug(2, "DACP Album Name seen");
                 if (update_string_record_with_data(&metadata_store.npi.album_name, sp - item_size,
                                                    item_size)) {
@@ -889,7 +890,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   metadata_changed |= 1;
                 }
                 break;
-              case 'cang': // genre
+              case DACP_FOURCC('c', 'a', 'n', 'g'): // genre
                 debug(2, "DACP Genre seen");
                 if (update_string_record_with_data(&metadata_store.npi.genre, sp - item_size,
                                                    item_size)) {
@@ -897,7 +898,8 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   metadata_changed |= 1;
                 }
                 break;
-              case 'canp': // nowplaying 4 ids: dbid, plid, playlistItem, itemid (from mellowware
+              case DACP_FOURCC('c', 'a', 'n', 'p'): // nowplaying 4 ids: dbid, plid, playlistItem,
+                                                    // itemid (from mellowware
                            // see reference above)
                 debug(2, "DACP Composite ID seen");
                 if ((metadata_store.npi.item_composite_id_is_valid == 0) ||
@@ -918,7 +920,7 @@ void *dacp_monitor_thread_code(__attribute__((unused)) void *na) {
                   metadata_changed |= 1;
                 }
                 break;
-              case 'astm':
+              case DACP_FOURCC('a', 's', 't', 'm'):
                 t = sp - item_size;
                 ui = ntohl(*(uint32_t *)(t));
                 debug(2, "DACP Song Time seen: \"%u\" milliseconds, of length %zu.", ui, item_size);
@@ -1185,13 +1187,14 @@ int dacp_get_client_volume(int32_t *result) {
     char *sp = server_reply;
     size_t item_size;
     if (reply_size >= 8) {
-      if (dacp_tlv_crawl(&sp, reply_size, &item_size) == 'cmgt') {
+      if (dacp_tlv_crawl(&sp, reply_size, &item_size) == DACP_FOURCC('c', 'm', 'g', 't')) {
         sp -= item_size; // drop down into the array -- don't skip over it
         reply_size -= 8;
         while (reply_size >= 8) {
           uint32_t type = dacp_tlv_crawl(&sp, reply_size, &item_size);
           reply_size -= item_size + 8;
-          if (type == 'cmvo') { // drop down into the dictionary -- don't skip over it
+          if (type == DACP_FOURCC('c', 'm', 'v', 'o')) { // drop down into the dictionary -- don't
+                                                          // skip over it
             char *t = sp - item_size;
             overall_volume = ntohl(*(uint32_t *)(t));
           } else if (type == 0) {
@@ -1257,13 +1260,15 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
     char *sp = server_reply;
     size_t item_size;
     if (remaining_bytes_in_response >= 8) {
-      if (dacp_tlv_crawl(&sp, remaining_bytes_in_response, &item_size) == 'casp') {
+      if (dacp_tlv_crawl(&sp, remaining_bytes_in_response, &item_size) ==
+          DACP_FOURCC('c', 'a', 's', 'p')) {
         //          debug(1,"Speakers:",item_size);
         sp -= item_size; // drop down into the array -- don't skip over it
         remaining_bytes_in_response -= 8;
         while (remaining_bytes_in_response >= 8) {
           uint32_t type = dacp_tlv_crawl(&sp, remaining_bytes_in_response, &item_size);
-          if (type == 'mdcl') { // drop down into the dictionary -- don't skip over it
+          if (type == DACP_FOURCC('m', 'd', 'c', 'l')) { // drop down into the dictionary -- don't
+                                                          // skip over it
             // debug(1,">>>> Dictionary:");
             sp -= item_size;
             remaining_bytes_in_response -= 8;
@@ -1284,7 +1289,7 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
             int32_t r;
             int64_t s, v;
             switch (type) {
-            case 'minm':
+            case DACP_FOURCC('m', 'i', 'n', 'm'):
               if (item_size <= 0)
                 break;
               t = sp - item_size;
@@ -1295,7 +1300,7 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
               speaker_info[speaker_index].name[sizeof(speaker_info[speaker_index].name) - 1] =
                   '\0'; // just in case
               break;
-            case 'cmvo':
+            case DACP_FOURCC('c', 'm', 'v', 'o'):
               t = sp - item_size;
               if (item_size >= 4) {
                 r = ntohl(*(uint32_t *)(t));
@@ -1304,7 +1309,7 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
               // debug(1,"The individual volume of speaker \"%s\" is
               // \"%d\".",speaker_info[speaker_index].name,r);
               break;
-            case 'msma':
+            case DACP_FOURCC('m', 's', 'm', 'a'):
               if (item_size >= 8) {
                 t = sp - item_size;
                 s = ntohl(*(uint32_t *)(t));
@@ -1317,7 +1322,7 @@ int dacp_get_speaker_list(dacp_spkr_stuff *speaker_info, int max_size_of_array,
               // debug(1,"Speaker machine number: %ld",s);
               break;
 
-            case 'caia':
+            case DACP_FOURCC('c', 'a', 'i', 'a'):
               speaker_info[speaker_index].active = 1;
               break;
             /*

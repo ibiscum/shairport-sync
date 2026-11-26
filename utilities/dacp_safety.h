@@ -15,8 +15,16 @@ static inline void dacp_safe_copy_string(char *dst, size_t dst_size, const char 
     return;
   }
 
-  strncpy(dst, src, dst_size - 1);
-  dst[dst_size - 1] = '\0';
+  size_t max_copy = dst_size - 1;
+#if defined(__GNUC__) || defined(__clang__)
+  size_t src_object_size = __builtin_object_size(src, 1);
+  if ((src_object_size != (size_t)-1) && (src_object_size > 0) &&
+      ((src_object_size - 1) < max_copy))
+    max_copy = src_object_size - 1;
+#endif
+  size_t copy_len = strnlen(src, max_copy);
+  memcpy(dst, src, copy_len);
+  dst[copy_len] = '\0';
 }
 
 static inline int dacp_tlv_crawl_checked(char **cursor, ssize_t *remaining, uint32_t *type,

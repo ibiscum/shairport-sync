@@ -85,7 +85,7 @@ Timestamps are referenced relative to the source computer's clock – the "sourc
 
 ./configure --with-ssl=openssl --with-pkg-config --with-avahi --with-alsa --with-pipewire --with-airplay-2
 
-./configure --with-ssl=openssl --with-pkg-config --with-airplay-2 --with-alsa --with-avahi --with-pipe --with-metadata --with-dbus-interface --with-dbus-test-client
+./configure --with-ssl=openssl --with-pkg-config --with-airplay-2 --with-alsa --with-avahi --with-pipe --with-metadata --with-dbus-interface --with-dbus-test-client --with-systemd-startup --with-configfiles
 ```
 
 ### Note on `pipe` output format/rate

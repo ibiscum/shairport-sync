@@ -8,10 +8,9 @@
 #include <mosquitto.h>
 #else
 struct mosquitto;
-struct mosquitto_message;
 #endif
 
-int initialise_mqtt();
+int initialise_mqtt(void);
 void mqtt_process_metadata(uint32_t type, uint32_t code, const char *data, uint32_t length);
 void mqtt_publish(const char *topic, const char *data, uint32_t length);
 
